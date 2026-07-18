@@ -11,7 +11,7 @@ Every stochastic draw in an environment is a *pure function* of four words:
   batched implementation reseeds terminated instances without coordinating any
   stream state with the reference implementation.
 - ``step``: the in-episode step index at which the draw occurs (0-based; draws
-  made during reset use step 0 with a reserved slot, or their own slot).
+  made during reset use step 0 with their own dedicated slots).
 - ``slot``: a small integer naming *which* random decision this is (e.g.
   "movement slip", "spawn position"). Slots MUST be enumerated in the
   environment's spec.md and defined as an IntEnum in the env package. Two
@@ -41,9 +41,13 @@ BACKENDS
   sign-extended high bits.
 
 The mixer is splitmix64 (Steele et al.), applied as a sponge over the input
-words. It is not cryptographic; it is statistically strong far beyond what
-environment stochasticity needs, and small enough to re-implement identically
-in any array framework.
+words in the canonical order ``(domain, slot, index, key, step)``. Scalar
+leading words (domain/slot/index are almost always Python ints) collapse into
+a cached prefix, so the common batched draw costs only two mixer rounds of
+tensor ops. The word order is part of the contract: both backends must absorb
+in exactly this order. The mixer is not cryptographic; it is statistically
+strong far beyond what environment stochasticity needs, and small enough to
+re-implement identically in any array framework.
 """
 
 from __future__ import annotations
@@ -87,6 +91,23 @@ def _hash_words(*words: int) -> int:
     return h
 
 
+# Plain-dict cache (not lru_cache: torch.compile traces through this and
+# warns on lru_cache wrappers; a dict get specializes cleanly).
+_PREFIX_CACHE: dict[tuple[int, int], int] = {}
+
+
+def _draw_prefix(slot: int, index: int) -> int:
+    """Sponge state after absorbing (DOMAIN_DRAW, slot, index) — the scalar
+    leading words of a draw. Cached; slots/indices are small enums."""
+    cached = _PREFIX_CACHE.get((slot, index))
+    if cached is None:
+        cached = _PREFIX_CACHE[(slot, index)] = _hash_words(_DOMAIN_DRAW, int(slot), int(index))
+    return cached
+
+
+_EPISODE_PREFIX = _hash_words(_DOMAIN_EPISODE)
+
+
 def episode_key(instance_seed: int, episode: int) -> int:
     """Derive the per-episode key for an instance.
 
@@ -94,13 +115,15 @@ def episode_key(instance_seed: int, episode: int) -> int:
     explicit reset of the reference env within a differential run) increments
     ``episode``.
     """
-    return _hash_words(_DOMAIN_EPISODE, instance_seed, episode)
+    h = _splitmix64(_EPISODE_PREFIX ^ (instance_seed & _MASK64))
+    return _splitmix64(h ^ (episode & _MASK64))
 
 
 def draw_bits(key: int, step: int, slot: int, index: int = 0) -> int:
     """64 uniform bits for this (key, step, slot, index). Returned as a
     non-negative Python int in [0, 2**64)."""
-    return _hash_words(_DOMAIN_DRAW, key, step, slot, index)
+    h = _splitmix64(_draw_prefix(slot, index) ^ (key & _MASK64))
+    return _splitmix64(h ^ (step & _MASK64))
 
 
 def draw_uniform(key: int, step: int, slot: int, index: int = 0) -> float:
@@ -152,8 +175,10 @@ def _as_i64(w: IntOrTensor) -> torch.Tensor:
 
 
 def _hash_words_torch(*words: IntOrTensor) -> torch.Tensor:
-    """Batched sponge. Words may be int64 tensors (broadcastable) or Python
-    ints; the result broadcasts across all tensor words."""
+    """Batched sponge over the given words in order. Words may be int64
+    tensors (broadcastable) or Python ints; the result broadcasts across all
+    tensor words. Kept generic for tensor-valued slots/indices; the draw_*
+    functions below use the cached-prefix fast path when slot/index are ints."""
     h = torch.tensor(0, dtype=torch.int64)
     for w in words:
         h = _splitmix64_torch(h ^ _as_i64(w))
@@ -164,30 +189,38 @@ def episode_key_torch(instance_seeds: torch.Tensor, episodes: torch.Tensor) -> t
     """Batched :func:`episode_key`: [N] int64 seeds x [N] int64 episode
     counters -> [N] int64 keys (bit-identical to the scalar version,
     reinterpreted as int64)."""
-    return _hash_words_torch(_DOMAIN_EPISODE, instance_seeds, episodes)
+    h = _splitmix64_torch(_i64(_EPISODE_PREFIX) ^ instance_seeds.to(torch.int64))
+    return _splitmix64_torch(h ^ episodes.to(torch.int64))
 
 
-def draw_bits_torch(keys: torch.Tensor, steps: IntOrTensor, slot: int,
+def draw_bits_torch(keys: torch.Tensor, steps: IntOrTensor, slot: IntOrTensor,
                     index: IntOrTensor = 0) -> torch.Tensor:
     """Batched :func:`draw_bits`. Returns int64 tensor whose bits equal the
     scalar backend's uint64 result (values may print negative; that is the
     two's-complement reinterpretation, not a difference)."""
-    return _hash_words_torch(_DOMAIN_DRAW, keys, steps, slot, index)
+    if isinstance(slot, int) and isinstance(index, int):
+        # Fast path: (domain, slot, index) prefix collapses to a cached scalar.
+        h = _splitmix64_torch(_i64(_draw_prefix(slot, index)) ^ keys.to(torch.int64))
+    else:
+        # Generic path (tensor-valued slot/index): absorb the same words in
+        # the same canonical order — results are identical to the fast path.
+        h = _hash_words_torch(_DOMAIN_DRAW, slot, index, keys)
+    return _splitmix64_torch(h ^ _as_i64(steps))
 
 
-def draw_uniform_torch(keys: torch.Tensor, steps: IntOrTensor, slot: int,
+def draw_uniform_torch(keys: torch.Tensor, steps: IntOrTensor, slot: IntOrTensor,
                        index: IntOrTensor = 0) -> torch.Tensor:
     """Batched :func:`draw_uniform` -> float64 tensor, bit-identical."""
     return _lshr(draw_bits_torch(keys, steps, slot, index), 11).to(torch.float64) * _INV_2_53
 
 
-def draw_randint_torch(keys: torch.Tensor, steps: IntOrTensor, slot: int, n: int,
+def draw_randint_torch(keys: torch.Tensor, steps: IntOrTensor, slot: IntOrTensor, n: int,
                        index: IntOrTensor = 0) -> torch.Tensor:
     """Batched :func:`draw_randint` -> int64 tensor in [0, n), bit-identical."""
     return _lshr(draw_bits_torch(keys, steps, slot, index), 1) % n
 
 
-def draw_bernoulli_torch(keys: torch.Tensor, steps: IntOrTensor, slot: int, p: float,
+def draw_bernoulli_torch(keys: torch.Tensor, steps: IntOrTensor, slot: IntOrTensor, p: float,
                          index: IntOrTensor = 0) -> torch.Tensor:
     """Batched :func:`draw_bernoulli` -> bool tensor, bit-identical."""
     return draw_uniform_torch(keys, steps, slot, index) < p

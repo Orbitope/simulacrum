@@ -3,8 +3,8 @@
 VECTORIZATION IDIOMS (the contract for subclasses)
 ==================================================
 All state lives in tensors with a leading batch dimension ``[N, ...]``. There
-is no per-instance Python object, and ``step`` must contain no data-dependent
-Python branching on instance state. The core idioms:
+is no per-instance Python object, and the step path must contain no
+data-dependent Python branching on instance state. The core idioms:
 
 **Branch -> mask.** Anywhere the reference implementation writes::
 
@@ -42,22 +42,27 @@ breaks bit-identity with the reference implementation.
 
 AUTO-RESET CONTRACT
 ===================
-``step`` computes the transition for all instances, then auto-resets the
-terminated ones in-tensor before observing:
+``step`` runs a fully tensorized, branch-free core (compilable with
+``compile=True``):
 
 1. ``_step_impl(actions)`` -> ``(rewards, terminated)``, mutating state
-   tensors for ALL instances (masked as needed).
-2. Invariants run over the post-transition state (``debug=True`` only).
-3. For terminated instances: their terminal state is serialized into
-   ``info["final_state_json"]`` (dict: index -> state JSON), their episode
-   counter increments, their episode key is re-derived, their in-episode step
-   counter ``self.t`` zeroes, and ``_reset_instances(mask)`` re-initializes
-   their state tensors.
+   tensors for ALL instances (masked as needed); then the in-episode step
+   counter ``self.t`` increments.
+2. The post-transition state is snapshotted (tensor clones — this is where
+   terminal states are captured).
+3. For ALL instances, next-episode keys are computed and where-selected onto
+   terminated instances; their episode counter increments and ``self.t``
+   zeroes. ``_reset_instances(terminated)`` re-initializes their state
+   tensors (masked — non-terminated neighbors must be bit-untouched; the
+   auto-reset test enforces this).
 4. ``observe()`` runs on the post-reset state, so the observation returned
-   for a terminated instance is the FIRST observation of its next episode
-   (the terminal observation is recoverable from ``final_state_json``).
-   Non-terminated neighbors must be bit-untouched by a reset — the
-   auto-reset test enforces this.
+   for a terminated instance is the FIRST observation of its next episode.
+   The terminal state is delivered in ``info["final_state_json"]``
+   (dict: index -> state JSON), built from the snapshot.
+
+With ``debug=True`` every registered invariant runs over the whole batch
+both after the transition (so terminal states are checked) and after any
+auto-reset (debug mode always uses the eager path).
 
 RNG
 ===
@@ -115,16 +120,23 @@ class BatchedEnv(ABC):
     """Batched tensor implementation, written from spec.md only.
 
     Subclasses implement ``_reset_instances``, ``_step_impl``, ``observe``,
-    and ``slice_to_json``. The base class owns the step loop, RNG seeding
-    state, auto-reset, and invariant checking. See the module docstring for
-    the idioms and the auto-reset contract.
+    and ``state_tensors`` (and may override ``slice_to_json`` for nested
+    state). The base class owns the step loop, RNG seeding state, auto-reset,
+    terminal-state capture, and invariant checking. See the module docstring
+    for the idioms and the auto-reset contract.
+
+    ``compile=True`` wraps the tensorized step core in ``torch.compile``
+    (ignored when ``debug=True``; the harness's compiled-parity test verifies
+    the compiled path is bit-identical to eager).
     """
 
-    def __init__(self, n: int, *, debug: bool = False,
+    def __init__(self, n: int, *, debug: bool = False, compile: bool = False,
+                 emit_final_states: bool = True,
                  failures_dir: str | Path = "failures",
                  device: str | torch.device = "cpu"):
         self.n = n
         self.debug = debug
+        self.emit_final_states = emit_final_states
         self.failures_dir = Path(failures_dir)
         self.device = torch.device(device)
         self._invariants: list[tuple[str, Callable]] = []
@@ -134,6 +146,9 @@ class BatchedEnv(ABC):
                     entry = (attr._invariant_name, attr)
                     if entry[0] not in [n_ for n_, _ in self._invariants]:
                         self._invariants.append(entry)
+        self._core = self._eager_core
+        if compile and not debug:
+            self._core = torch.compile(self._eager_core, dynamic=False)
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -150,32 +165,50 @@ class BatchedEnv(ABC):
         if self.debug:
             self._check_invariants()
 
+    def _eager_core(self, actions: torch.Tensor):
+        """The branch-free tensor step: transition, snapshot, re-key,
+        auto-reset, observe. Everything here must stay data-independent
+        Python-control-flow-wise so torch.compile can capture one graph."""
+        rewards, terminated = self._step_impl(actions)
+        self.t = self.t + 1
+        if self.debug:
+            self._check_invariants()  # checks terminal states, pre-reset
+        snapshot = None
+        if self.emit_final_states:
+            snapshot = {name: tensor.clone()
+                        for name, tensor in self.state_tensors().items()}
+        self.episodes = torch.where(terminated, self.episodes + 1, self.episodes)
+        self.keys = torch.where(
+            terminated, rng.episode_key_torch(self.seeds, self.episodes), self.keys)
+        self.t = torch.where(terminated, torch.zeros_like(self.t), self.t)
+        self._reset_instances(terminated)
+        if self.debug:
+            self._check_invariants()
+        return self.observe(), rewards, terminated, snapshot
+
     def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         """Advance all instances one step.
 
         Returns ``(obs, rewards, terminated, info)``. For instances where
         ``terminated[i]`` is True, ``obs[i]`` is the first observation of the
         next episode (auto-reset); the terminal state is in
-        ``info["final_state_json"][i]``.
+        ``info["final_state_json"][i]`` (unless ``emit_final_states=False``).
         """
-        rewards, terminated = self._step_impl(actions)
-        self.t = self.t + 1
-        if self.debug:
-            self._check_invariants()
+        obs, rewards, terminated, snapshot = self._core(actions)
         info: dict = {}
-        if bool(terminated.any()):
+        if snapshot is not None and bool(terminated.any()):
+            indices = torch.nonzero(terminated, as_tuple=False).flatten().tolist()
+            columns = {name: tensor[terminated].tolist()
+                       for name, tensor in snapshot.items()}
             info["final_state_json"] = {
-                int(i): self.slice_to_json(int(i))
-                for i in torch.nonzero(terminated, as_tuple=False).flatten()
+                idx: self._json_from_columns(columns, row)
+                for row, idx in enumerate(indices)
             }
-            self.episodes = torch.where(terminated, self.episodes + 1, self.episodes)
-            new_keys = rng.episode_key_torch(self.seeds, self.episodes)
-            self.keys = torch.where(terminated, new_keys, self.keys)
-            self.t = torch.where(terminated, torch.zeros_like(self.t), self.t)
-            self._reset_instances(terminated)
-            if self.debug:
-                self._check_invariants()
-        return self.observe(), rewards, terminated, info
+        return obs, rewards, terminated, info
+
+    @staticmethod
+    def _json_from_columns(columns: dict[str, list], row: int) -> dict:
+        return {name: values[row] for name, values in columns.items()}
 
     # -- subclass hooks ----------------------------------------------------
 
@@ -185,8 +218,9 @@ class BatchedEnv(ABC):
         True, leaving others bit-untouched. Called by ``reset`` (all True)
         and by auto-reset (terminated mask). ``self.keys``/``self.t`` are
         already updated; initialization draws use step 0 with dedicated
-        slots. On first call, state tensors do not exist yet — allocate them
-        full-size, then masked-fill."""
+        slots. Allocate full-size tensors in the first call (during
+        ``reset``), then masked-fill with ``torch.where``. Must stay
+        branch-free on instance data (compilable)."""
 
     @abstractmethod
     def _step_impl(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -199,10 +233,19 @@ class BatchedEnv(ABC):
         """Observation tensor ``[N, ...]`` for the current state."""
 
     @abstractmethod
+    def state_tensors(self) -> dict[str, torch.Tensor]:
+        """The serializable state as {schema field name: Tensor[N, ...]}.
+        Include the in-episode step counter (``{"t": self.t}``) if it is part
+        of the schema. Used for terminal-state capture and the default
+        ``slice_to_json``."""
+
     def slice_to_json(self, i: int) -> dict:
         """Extract instance ``i`` as a dict conforming to schema.json's
         ``state`` definition — the representation the differential test
-        compares against the reference's ``to_json``."""
+        compares against the reference's ``to_json``. Default: one flat field
+        per ``state_tensors`` entry; override for nested/structured states."""
+        return {name: tensor[i].tolist()
+                for name, tensor in self.state_tensors().items()}
 
     # -- invariants --------------------------------------------------------
 

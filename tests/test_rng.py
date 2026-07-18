@@ -29,12 +29,9 @@ def test_bits_cross_backend_random():
         dtype=torch.int64,
     )
     keys_t = torch.tensor([rng._i64(k) for k in keys], dtype=torch.int64)
-    # slot/index vary per element here, so hash with tensor slot/index words
-    # (draw_bits_torch accepts tensors for steps/index; slots vary too in this
-    # stress test, so go through the sponge directly):
-    batched = rng._hash_words_torch(
-        rng._DOMAIN_DRAW, keys_t, torch.tensor(steps), torch.tensor(slots), torch.tensor(idxs)
-    )
+    # slot/index vary per element: exercises the generic (tensor-word) path.
+    batched = rng.draw_bits_torch(keys_t, torch.tensor(steps), torch.tensor(slots),
+                                  torch.tensor(idxs))
     assert torch.equal(scalar, batched)
 
 
@@ -97,6 +94,19 @@ def test_episode_key_cross_backend():
         torch.tensor(episodes, dtype=torch.int64),
     )
     assert torch.equal(scalar, batched)
+
+
+def test_fast_prefix_path_matches_generic_path():
+    # Scalar slot/index (cached-prefix fast path) must equal the same draw
+    # made through the generic tensor-word sponge.
+    keys_t = torch.arange(1000, dtype=torch.int64) * 2654435761
+    steps = torch.arange(1000, dtype=torch.int64) % 60
+    for slot, index in [(0, 0), (1, 0), (3, 7)]:
+        fast = rng.draw_bits_torch(keys_t, steps, slot, index)
+        generic = rng.draw_bits_torch(keys_t, steps,
+                                      torch.full_like(keys_t, slot),
+                                      torch.full_like(keys_t, index))
+        assert torch.equal(fast, generic)
 
 
 def test_statistical_sanity():
