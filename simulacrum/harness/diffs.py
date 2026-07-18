@@ -19,15 +19,9 @@ class FieldDiff:
 
 
 def _atol_for(path: str, atol: dict[str, float]) -> float:
-    if path in atol:
-        return atol[path]
-    # Array items declare tolerance with '*' segments.
-    parts = path.split("/")
-    for pattern, tol in atol.items():
-        pp = pattern.split("/")
-        if len(pp) == len(parts) and all(a == "*" or a == b for a, b in zip(pp, parts)):
-            return tol
-    return 0.0
+    # Callers pass the path pre-wildcarded (numeric segments -> '*', matching
+    # the keys spec.collect_atol emits), so a plain lookup suffices.
+    return atol.get(path, 0.0)
 
 
 def diff_states(ref: Any, fast: Any, atol: dict[str, float] | None = None,
@@ -56,6 +50,12 @@ def diff_states(ref: Any, fast: Any, atol: dict[str, float] | None = None,
     elif isinstance(ref, bool) or isinstance(fast, bool):
         if ref is not fast:
             diffs.append(FieldDiff(path, ref, fast, "bool mismatch"))
+    elif isinstance(ref, float) != isinstance(fast, float) and (
+            isinstance(ref, (int, float)) and isinstance(fast, (int, float))):
+        # int on one side, float on the other: numerically equal values would
+        # slip through the float branch below, hiding exactly the dtype drift
+        # the framework exists to catch.
+        diffs.append(FieldDiff(path, ref, fast, "numeric type mismatch (int vs float — dtype drift)"))
     elif isinstance(ref, float) or isinstance(fast, float):
         tol = _atol_for(_wildcard_indices(path), atol)
         if tol > 0.0:

@@ -23,7 +23,7 @@ import numpy as np
 import torch
 
 from simulacrum.harness.config import HarnessConfig
-from simulacrum.harness.diffs import FieldDiff, diff_states, format_diffs
+from simulacrum.harness.diffs import FieldDiff, _wildcard_indices, diff_states, format_diffs
 from simulacrum.traj.writer import TrajectoryWriter
 
 
@@ -112,7 +112,7 @@ def run_differential(cfg: HarnessConfig, seed: int, n_steps: int | None = None,
             # Record which declared tolerances were actually exercised: fields
             # that fail a strict (no-tolerance) diff but passed above.
             for d in diff_states(ref_json, fast_json, {}):
-                strict_path = "/".join("*" if s.isdigit() else s for s in d.path.split("/"))
+                strict_path = _wildcard_indices(d.path)
                 if strict_path in atol:
                     tol_used[strict_path] = atol[strict_path]
         return None
@@ -148,6 +148,7 @@ def run_differential(cfg: HarnessConfig, seed: int, n_steps: int | None = None,
         if cfg.reward_atol > 0.0 and r_reward != fr:
             tol_used["<reward>"] = cfg.reward_atol
 
+        fast_json = fast.slice_to_json(0)  # post-step (post-auto-reset) state, once
         if r_term:
             # Terminal state: fast side exposes it via info (post-step state
             # tensors already hold the next episode).
@@ -163,11 +164,13 @@ def run_differential(cfg: HarnessConfig, seed: int, n_steps: int | None = None,
             # Reference resets explicitly; batched already auto-reset.
             episode += 1
             state = ref.reset(seed, episode)
+            ref_json_post = ref.to_json(state)
         else:
-            fast_w.record(t, episode, fast.slice_to_json(0), action, fr, False)
+            fast_w.record(t, episode, fast_json, action, fr, False)
+            ref_json_post = ref_terminal_json  # same state, already serialized
 
         # Post-step (or post-reset) states must agree.
-        div = compare_states(t, "state", ref.to_json(state), fast.slice_to_json(0))
+        div = compare_states(t, "state", ref_json_post, fast_json)
         if div is not None:
             return finish(t, div)
 

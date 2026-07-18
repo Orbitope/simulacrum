@@ -16,8 +16,14 @@ from simulacrum.traj.writer import Trajectory
 
 def _paths(source) -> list[Path]:
     if isinstance(source, (str, Path)) and Path(source).is_dir():
-        return sorted(p for p in Path(source).glob("*.json*")
-                      if not p.name.startswith("manifest"))
+        # Skip export-pack companions that live alongside trajectory files
+        # (manifest.json, schema.json, *.flat.json are not trajectories and
+        # would crash read_trajectory).
+        return sorted(
+            p for p in Path(source).glob("*.json*")
+            if not p.name.startswith("manifest")
+            and p.name != "schema.json"
+            and not p.name.endswith(".flat.json"))
     return [Path(p) for p in source]
 
 

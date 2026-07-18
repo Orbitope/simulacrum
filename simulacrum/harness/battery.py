@@ -45,13 +45,20 @@ __all__ = [
 _INDEPENDENCE_SEED_BASE = 5000
 
 
+def _actions_at(cfg, seeds: list[int], t: int):
+    """The batch action tensor for global step t — one deterministic
+    per-instance action stream, shared by every battery test."""
+    return cfg.action_sampler.to_tensor(
+        [cfg.action_sampler.sample(s, t) for s in seeds])
+
+
 def _solo_trajectory(cfg, seed: int, n_steps: int):
     """Run one instance alone (batched n=1); returns per-step records."""
     env = cfg.batched_factory(n=1, debug=False)
     env.reset(torch.tensor([seed], dtype=torch.int64))
     records = []
     for t in range(n_steps):
-        a = cfg.action_sampler.to_tensor([cfg.action_sampler.sample(seed, t)])
+        a = _actions_at(cfg, [seed], t)
         obs, reward, term, info = env.step(a)
         records.append({
             "state": env.slice_to_json(0),
@@ -96,8 +103,7 @@ def test_batch_independence(harness_config):
     env = cfg.batched_factory(n=n, debug=False)
     env.reset(torch.tensor(seeds, dtype=torch.int64))
     for t in range(n_steps):
-        actions = cfg.action_sampler.to_tensor(
-            [cfg.action_sampler.sample(s, t) for s in seeds])
+        actions = _actions_at(cfg, seeds, t)
         obs, reward, term, info = env.step(actions)
         for i in range(n):
             solo = solos[i][t]
@@ -126,8 +132,7 @@ def test_invariant_sweep(harness_config):
     seeds = list(range(10_000, 10_000 + cfg.sweep_batch))
     env.reset(torch.tensor(seeds, dtype=torch.int64))
     for t in range(cfg.sweep_steps):
-        actions = cfg.action_sampler.to_tensor(
-            [cfg.action_sampler.sample(s, t) for s in seeds])
+        actions = _actions_at(cfg, seeds, t)
         env.step(actions)  # raises InvariantViolation (with snapshot) on failure
 
 
@@ -150,8 +155,7 @@ def test_auto_reset(harness_config, schema_atol):
 
     saw_termination = False
     for t in range(cap):
-        actions = cfg.action_sampler.to_tensor(
-            [cfg.action_sampler.sample(s, t) for s in seeds])
+        actions = _actions_at(cfg, seeds, t)
         obs, reward, term, info = env.step(actions)
         if not bool(term.any()):
             continue
@@ -201,8 +205,7 @@ def test_determinism(harness_config):
         env.reset(torch.tensor(seeds, dtype=torch.int64))
         states = []
         for t in range(cfg.n_steps):
-            actions = cfg.action_sampler.to_tensor(
-                [cfg.action_sampler.sample(s, t) for s in seeds])
+            actions = _actions_at(cfg, seeds, t)
             env.step(actions)
             states.append([env.slice_to_json(i) for i in range(4)])
         runs.append(states)
@@ -293,8 +296,7 @@ def test_benchmark_factory_parity(harness_config):
     plain.reset(seeds.clone())
     bench.reset(seeds.clone())
     for t in range(cfg.n_steps):
-        actions = cfg.action_sampler.to_tensor(
-            [cfg.action_sampler.sample(int(s), t) for s in seeds])
+        actions = _actions_at(cfg, [int(s) for s in seeds], t)
         obs_p, rew_p, term_p, _ = plain.step(actions)
         obs_b, rew_b, term_b, _ = bench.step(actions.clone())
         assert torch.equal(term_p, term_b), f"terminated diverged at step {t}"
@@ -326,7 +328,8 @@ def test_throughput(harness_config, record_extra):
         if term:
             episode += 1
             state = ref.reset(seed, episode)
-    ref_sps = n_steps / (time.perf_counter() - t0)
+    # max() guards against a 0.0 delta on platforms with coarse timers.
+    ref_sps = n_steps / max(time.perf_counter() - t0, 1e-9)
     results["reference_steps_per_sec"] = ref_sps
 
     factory = cfg.benchmark_factory or cfg.batched_factory
@@ -334,7 +337,7 @@ def test_throughput(harness_config, record_extra):
     for n in cfg.benchmark_batches:
         seeds = list(range(n))
         action_tensors = [
-            cfg.action_sampler.to_tensor([cfg.action_sampler.sample(s, t) for s in seeds])
+            _actions_at(cfg, seeds, t)
             for t in range(n_steps)
         ]
         for debug in (False, True):
@@ -346,7 +349,7 @@ def test_throughput(harness_config, record_extra):
             t0 = time.perf_counter()
             for t in range(n_steps):
                 env.step(action_tensors[t])
-            sps = n * n_steps / (time.perf_counter() - t0)
+            sps = n * n_steps / max(time.perf_counter() - t0, 1e-9)
             results["batched"][f"n={n},debug={debug}"] = sps
 
     largest = max(cfg.benchmark_batches)

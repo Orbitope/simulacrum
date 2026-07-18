@@ -92,11 +92,12 @@ def print_summary(report: dict) -> None:
 
 def _source_mtime(env_root: Path) -> float:
     newest = 0.0
-    for pattern in ("*.py", "spec.md", "schema.json"):
-        for p in env_root.rglob(pattern):
-            if "failures" in p.parts or "__pycache__" in p.parts:
-                continue
-            newest = max(newest, p.stat().st_mtime)
+    for p in env_root.rglob("*"):  # single traversal, filter by name
+        if p.suffix != ".py" and p.name not in ("spec.md", "schema.json"):
+            continue
+        if "failures" in p.parts or "__pycache__" in p.parts:
+            continue
+        newest = max(newest, p.stat().st_mtime)
     return newest
 
 

@@ -39,6 +39,18 @@ def test_bool_int_not_confused():
     assert len(diffs) == 1
 
 
+def test_int_float_dtype_drift_caught():
+    # 5 vs 5.0 is numerically equal but signals dtype drift in serialized
+    # state — must be flagged, not silently passed.
+    diffs = diff_states({"v": 5}, {"v": 5.0}, {})
+    assert len(diffs) == 1 and "dtype drift" in diffs[0].reason
+    diffs = diff_states({"v": 5.0}, {"v": 5}, {})
+    assert len(diffs) == 1
+    # ...and a declared x-atol does not excuse a type mismatch.
+    diffs = diff_states({"v": 5}, {"v": 5.0}, {"v": 1e-6})
+    assert len(diffs) == 1
+
+
 def test_length_mismatch():
     diffs = diff_states({"xs": [1, 2]}, {"xs": [1]}, {})
     assert len(diffs) == 1 and "length" in diffs[0].reason

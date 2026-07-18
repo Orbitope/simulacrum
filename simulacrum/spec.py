@@ -21,14 +21,16 @@ from pathlib import Path
 
 import jsonschema
 
+# Singular stems, matched as substrings of headings, so "## Reward",
+# "## Rewards", and "## Reward function" all satisfy the contract.
 REQUIRED_SPEC_SECTIONS = [
     "state space",
-    "actions",
-    "observations",
-    "rewards",
+    "action",
+    "observation",
+    "reward",
     "termination",
-    "invariants",
-    "rng slots",
+    "invariant",
+    "rng slot",
 ]
 
 REQUIRED_SCHEMA_DEFS = ["state", "action", "trajectory"]
@@ -46,19 +48,31 @@ def load_spec(env_root: str | Path) -> dict[str, str]:
         raise SpecError(f"missing spec.md in {env_root}")
     text = path.read_text()
     sections: dict[str, str] = {}
+    prose: dict[str, str] = {}  # body excluding fenced code blocks
     current = None
+    in_fence = False
     for line in text.splitlines():
-        m = re.match(r"^#{1,6}\s+(.*)$", line)
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            if current is not None:
+                sections[current] += line + "\n"
+            continue
+        m = None if in_fence else re.match(r"^#{1,6}\s+(.*)$", line)
         if m:
             current = m.group(1).strip().lower()
             sections[current] = ""
+            prose[current] = ""
         elif current is not None:
             sections[current] += line + "\n"
+            if not in_fence:
+                prose[current] += line + "\n"
     missing = [s for s in REQUIRED_SPEC_SECTIONS
                if not any(s in heading for heading in sections)]
     if missing:
         raise SpecError(f"spec.md missing required sections: {missing}")
-    todos = [h for h, body in sections.items() if "TODO" in body]
+    # TODO gate: whole-word match, prose only — a `# TODO` inside an
+    # illustrative code fence or the word "TODOs" in a sentence doesn't count.
+    todos = [h for h, body in prose.items() if re.search(r"\bTODO\b", body)]
     if todos:
         raise SpecError(f"spec.md still has TODO markers in sections: {todos}")
     return sections

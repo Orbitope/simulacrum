@@ -6,7 +6,9 @@ state JSON dict to an output (text, a matplotlib Axes, an image, ...). It
 never imports the environment's reference or fast modules — its only input
 is trajectory/snapshot files.
 
-Environment packages provide their mapping in ``render.py``:
+Environment packages provide their mapping in ``render.py`` as two
+module-level functions (these aliases ARE the contract; the framework's
+plumbing calls them and nothing else):
 
 - ``render_state_text(state: dict) -> str``
 - ``render_state_mpl(state: dict, ax) -> None``
@@ -19,10 +21,10 @@ export pack (``simulacrum.viz.export_pack``).
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Callable
 
+# One state dict -> printable line(s).
+RenderStateText = Callable[[dict], str]
 
-class Renderer(Protocol):
-    def render_state(self, state: dict) -> Any:
-        """Map one schema-conformant state dict to an output artifact."""
-        ...
+# Draw one state dict onto a matplotlib Axes (second arg).
+RenderStateMpl = Callable[[dict, Any], None]

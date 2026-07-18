@@ -146,8 +146,9 @@ class BatchedEnv(ABC):
                     entry = (attr._invariant_name, attr)
                     if entry[0] not in [n_ for n_, _ in self._invariants]:
                         self._invariants.append(entry)
+        self._compiled = bool(compile) and not debug
         self._core = self._eager_core
-        if compile and not debug:
+        if self._compiled:
             self._core = torch.compile(self._eager_core, dynamic=False)
 
     # -- lifecycle ---------------------------------------------------------
@@ -173,17 +174,23 @@ class BatchedEnv(ABC):
         self.t = self.t + 1
         if self.debug:
             self._check_invariants()  # checks terminal states, pre-reset
+        # Under torch.compile the auto-reset block must run unconditionally
+        # (one branch-free graph); in eager mode, skip the snapshot clones and
+        # the batch-wide episode re-key on the (common) steps where nothing
+        # terminated. `self._compiled` short-circuits before the tensor sync.
+        any_terminated = self._compiled or bool(terminated.any())
         snapshot = None
-        if self.emit_final_states:
+        if self.emit_final_states and any_terminated:
             snapshot = {name: tensor.clone()
                         for name, tensor in self.state_tensors().items()}
-        self.episodes = torch.where(terminated, self.episodes + 1, self.episodes)
-        self.keys = torch.where(
-            terminated, rng.episode_key_torch(self.seeds, self.episodes), self.keys)
-        self.t = torch.where(terminated, torch.zeros_like(self.t), self.t)
-        self._reset_instances(terminated)
-        if self.debug:
-            self._check_invariants()
+        if any_terminated:
+            self.episodes = torch.where(terminated, self.episodes + 1, self.episodes)
+            self.keys = torch.where(
+                terminated, rng.episode_key_torch(self.seeds, self.episodes), self.keys)
+            self.t = torch.where(terminated, torch.zeros_like(self.t), self.t)
+            self._reset_instances(terminated)
+            if self.debug:
+                self._check_invariants()
         return self.observe(), rewards, terminated, snapshot
 
     def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
@@ -198,17 +205,19 @@ class BatchedEnv(ABC):
         info: dict = {}
         if snapshot is not None and bool(terminated.any()):
             indices = torch.nonzero(terminated, as_tuple=False).flatten().tolist()
-            columns = {name: tensor[terminated].tolist()
-                       for name, tensor in snapshot.items()}
             info["final_state_json"] = {
-                idx: self._json_from_columns(columns, row)
-                for row, idx in enumerate(indices)
+                i: self.snapshot_slice_to_json(snapshot, i) for i in indices
             }
         return obs, rewards, terminated, info
 
-    @staticmethod
-    def _json_from_columns(columns: dict[str, list], row: int) -> dict:
-        return {name: values[row] for name, values in columns.items()}
+    def snapshot_slice_to_json(self, snapshot: dict[str, torch.Tensor], i: int) -> dict:
+        """Serialize instance ``i`` from a pre-reset state snapshot (the
+        terminal state delivered in ``info["final_state_json"]``). Must
+        produce the same schema-conformant shape as :meth:`slice_to_json` —
+        if you override ``slice_to_json`` for nested state, override this
+        consistently (it reads from ``snapshot`` because the live tensors
+        already hold the next episode)."""
+        return {name: tensor[i].tolist() for name, tensor in snapshot.items()}
 
     # -- subclass hooks ----------------------------------------------------
 

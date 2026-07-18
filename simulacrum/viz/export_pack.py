@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from itertools import accumulate
 from pathlib import Path
 
 from simulacrum.traj.reader import read_trajectory
@@ -46,21 +47,27 @@ def _flatten(traj_obj) -> dict:
     for name in field_names:
         values = [traj_obj.initial["state"][name]] + [s["state"][name] for s in steps]
         if all(isinstance(v, bool) for v in values):
+            # Encoded as 0.0/1.0 so every column has one homogeneous float
+            # array; consumers branch on dtype.
             columns.append({"name": name, "dtype": "bool",
-                            "bool_values": values, "values": []})
+                            "values": [1.0 if v else 0.0 for v in values]})
         elif all(isinstance(v, (int, float)) for v in values):
             dtype = "int" if all(isinstance(v, int) for v in values) else "float"
             columns.append({"name": name, "dtype": dtype,
-                            "values": [float(v) for v in values], "bool_values": []})
+                            "values": [float(v) for v in values]})
         else:
             skipped.append(name)
 
     rewards = [float(s["reward"]) for s in steps]
-    cumulative = []
-    total = 0.0
-    for r in rewards:
-        total += r
-        cumulative.append(total)
+    cumulative = list(accumulate(rewards))
+
+    # Only scalar numeric actions can be projected losslessly; anything else
+    # must be read from the canonical trajectory file, and the flat file says
+    # so explicitly rather than silently emitting zeros.
+    has_scalar_actions = all(
+        isinstance(s["action"], (int, float)) and not isinstance(s["action"], bool)
+        for s in steps)
+    actions = [float(s["action"]) for s in steps] if has_scalar_actions else []
 
     return {
         "format_version": PACK_FORMAT_VERSION,
@@ -71,8 +78,8 @@ def _flatten(traj_obj) -> dict:
         "note": "state_fields values[0] is the initial state; values[i+1] is the post-step state of step i",
         "state_fields": columns,
         "skipped_fields": skipped,
-        "actions": [float(s["action"]) if isinstance(s["action"], (int, float)) else 0.0
-                    for s in steps],
+        "has_scalar_actions": has_scalar_actions,
+        "actions": actions,
         "rewards": rewards,
         "terminal_step_indices": [i for i, s in enumerate(steps) if s["terminated"]],
         "series": [
@@ -92,10 +99,18 @@ def export_pack(traj_paths, schema_path: str | Path, out_dir: str | Path,
 
     entries = []
     env_name = None
+    seen_stems: set[str] = set()
     for path in map(Path, traj_paths):
         traj = read_trajectory(path, schema=schema, validate=validate)
         env_name = traj.metadata["env"]
         stem = path.name.replace(".jsonl", "").replace(".json", "")
+        stem = stem.removesuffix(".trajectory")  # re-exporting a pack file
+        if stem in seen_stems:  # distinct inputs must not overwrite each other
+            n = 2
+            while f"{stem}_{n}" in seen_stems:
+                n += 1
+            stem = f"{stem}_{n}"
+        seen_stems.add(stem)
         traj_file = f"{stem}.trajectory.json"
         flat_file = f"{stem}.flat.json"
         (out_dir / traj_file).write_text(json.dumps(traj.to_obj(), indent=2))

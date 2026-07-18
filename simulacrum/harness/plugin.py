@@ -51,20 +51,6 @@ def _register_env(request):
     yield
 
 
-def pytest_runtest_logreport(report):
-    if report.when == "call" or (report.when == "setup" and report.outcome != "passed"):
-        short = report.nodeid.split("::")[-1]
-        outcome = report.outcome  # passed / failed / skipped
-        stash_holder = getattr(report, "_config_stash", None)
-        # stash is attached in pytest_runtest_makereport below
-        if stash_holder is not None:
-            stash_holder["results"][short] = {
-                "outcome": outcome,
-                "duration": round(report.duration, 3),
-                "message": _short_failure(report),
-            }
-
-
 def _short_failure(report) -> str | None:
     if report.outcome == "passed":
         return None
@@ -81,13 +67,27 @@ def _short_failure(report) -> str | None:
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
+    # Record outcomes here (where we have item.config) rather than smuggling
+    # the stash through an attribute on the report object — ad-hoc report
+    # attributes don't survive serialization under pytest-xdist.
     outcome = yield
     report = outcome.get_result()
-    report._config_stash = item.config.stash[_STASH]
+    if report.when == "call" or (report.when == "setup" and report.outcome != "passed"):
+        item.config.stash[_STASH]["results"][item.name] = {
+            "outcome": report.outcome,
+            "duration": round(report.duration, 3),
+            "message": _short_failure(report),
+        }
 
 
 def pytest_sessionfinish(session, exitstatus):
     stash = session.config.stash.get(_STASH, None)
     if not stash or stash["cfg_info"] is None:
+        return
+    if getattr(session.config.option, "keyword", None):
+        # A -k subset run must not overwrite the report: unrun required tests
+        # would count as missing and clobber a passing report with FAIL.
+        print("\n[simulacrum] subset run (-k): validation_report.json NOT updated "
+              "— run the full battery to refresh the gate")
         return
     report_mod.write_report(stash["cfg_info"], stash["results"], stash["extras"])

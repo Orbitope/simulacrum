@@ -41,15 +41,25 @@ def _cmd_validate(args: argparse.Namespace) -> int:
         pytest_args += ["-k", args.k]
     exit_code = pytest.main(pytest_args)
 
+    if args.k:
+        # Subset runs don't update the report (the plugin skips writing it);
+        # just relay the pytest result.
+        return int(exit_code)
+
     # Only trust a report THIS run wrote — if the battery errored before the
     # session-finish hook (e.g. a collection error), a stale report from an
-    # earlier run may still be on disk.
+    # earlier run may still be on disk. Compare the report's own created_at
+    # (microsecond precision, same clock) rather than file mtime, which can
+    # be floored to whole seconds on some filesystems.
     report_path = env_root / REPORT_FILENAME
-    if report_path.exists() and report_path.stat().st_mtime >= started_at:
+    if report_path.exists():
         report = json.loads(report_path.read_text())
-        print_summary(report)
-        print(f"Report written to {report_path}")
-        return 0 if report["overall_pass"] else 1
+        import datetime
+        created = datetime.datetime.fromisoformat(report["created_at"]).timestamp()
+        if created >= started_at - 1.0:
+            print_summary(report)
+            print(f"Report written to {report_path}")
+            return 0 if report["overall_pass"] else 1
     print(f"error: battery did not produce a fresh {report_path} "
           f"(it likely errored before running — see pytest output above)", file=sys.stderr)
     return exit_code or 1
