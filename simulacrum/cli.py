@@ -55,6 +55,16 @@ def _cmd_validate(args: argparse.Namespace) -> int:
     return exit_code or 1
 
 
+def _cmd_export_pack(args: argparse.Namespace) -> int:
+    from simulacrum.viz.export_pack import export_pack
+
+    pack = export_pack(args.trajectories, args.schema, args.out)
+    manifest = json.loads((pack / "manifest.json").read_text())
+    print(f"Export pack written to {pack} "
+          f"({len(manifest['trajectories'])} trajectories)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="simulacrum",
@@ -70,6 +80,14 @@ def main(argv: list[str] | None = None) -> int:
     p_val.add_argument("path", help="environment package root")
     p_val.add_argument("-k", default=None, help="pytest -k expression (subset of battery)")
     p_val.set_defaults(func=_cmd_validate)
+
+    p_exp = sub.add_parser(
+        "export-pack",
+        help="package trajectory files + schema + manifest for an external renderer")
+    p_exp.add_argument("schema", help="path to the env's schema.json")
+    p_exp.add_argument("trajectories", nargs="+", help="trajectory .json/.jsonl files")
+    p_exp.add_argument("-o", "--out", required=True, help="output pack directory")
+    p_exp.set_defaults(func=_cmd_export_pack)
 
     args = parser.parse_args(argv)
     return args.func(args)
