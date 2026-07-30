@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulacrum — Your Fast Environment Is Lying to You</title>
+<meta name="description" content="A batched RL environment is a rewrite, not an optimization — and nothing in a training curve tells you when the rewrite is wrong. Every environment on this page runs live in your browser.">
+<meta property="og:title" content="Simulacrum — Your Fast Environment Is Lying to You">
+<meta property="og:description" content="Write the environment twice. Prove the two agree bit-for-bit. An interactive tour of differential-testing RL simulators.">
+<meta property="og:type" content="article">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23111009'/%3E%3Cpolygon points='32,5 55,18.5 55,45.5 32,59 9,45.5 9,18.5' fill='none' stroke='%23E8C068' stroke-width='4.4' stroke-linejoin='round'/%3E%3Cpolygon points='32,18 43.5,24.7 43.5,39.3 32,46 20.5,39.3 20.5,24.7' fill='none' stroke='%236B7A8D' stroke-width='1.3' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --void:#111009; --surface:#1a1812; --raised:#211e17; --border:#2a2820;
+    --amber:#C49A3C; --amber-bright:#E8C068;
+    --steel:#6B7A8D; --steel-bright:#9AAABB;
+    --mauve:#9A7AB0; --sage:#7D9A6A; --terra:#C47A5A; --coral:#FF5E3A;
+    --text-bright:#EDE8DC; --text-primary:#C8C2B4; --text-muted:#6A6358;
+    --font-display:'Rajdhani',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  }
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{background:var(--void);color:var(--text-primary);font-family:var(--font-mono);
+    -webkit-font-smoothing:antialiased;line-height:1.7;overflow-x:hidden}
+  body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background-image:radial-gradient(circle,rgba(154,170,187,.10) 1px,transparent 1px);background-size:48px 48px}
+  body::after{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:radial-gradient(120% 120% at 50% 30%,rgba(0,0,0,0) 45%,rgba(0,0,0,.6) 100%)}
+  .wrap{position:relative;z-index:1}
+  .progress{position:fixed;top:0;left:0;height:2px;width:0;z-index:50;
+    background:linear-gradient(90deg,var(--amber),var(--amber-bright))}
+
+  .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:80px 24px}
+  .kicker{font-size:11px;letter-spacing:.3em;text-transform:uppercase;color:var(--text-muted);margin-bottom:22px}
+  .hero h1{font-family:var(--font-display);font-weight:700;font-size:clamp(36px,8vw,84px);line-height:1.02;color:var(--text-bright);max-width:16ch}
+  .hero h1 .accent{color:var(--amber-bright)}
+  .hero .sub{margin-top:24px;max-width:60ch;font-size:14px;color:var(--text-muted);line-height:1.75}
+  .hero .sub b{color:var(--text-primary);font-weight:500}
+  .scroll-cue{margin-top:46px;font-size:11px;letter-spacing:.2em;color:var(--text-muted);text-transform:uppercase;animation:bob 2s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+  @media (prefers-reduced-motion:reduce){.scroll-cue{animation:none}}
+
+  .beat{max-width:680px;margin:0 auto;padding:12vh 24px 3vh}
+  .beat .eyebrow{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--amber);margin-bottom:18px}
+  .beat .eyebrow.win{color:var(--sage)}
+  .beat h2{font-family:var(--font-display);font-weight:600;font-size:clamp(26px,4.5vw,40px);color:var(--text-bright);line-height:1.12;margin-bottom:20px}
+  .beat p{font-size:15px;color:var(--text-primary);margin-bottom:16px}
+  .beat p b{color:var(--text-bright);font-weight:500}
+  .beat code{background:var(--raised);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-size:13px;color:var(--steel-bright)}
+  .beat .amber{color:var(--amber-bright)} .beat .sage{color:var(--sage)}
+  .beat .coral{color:var(--coral)} .beat .steel{color:var(--steel-bright)} .beat .dim{color:var(--text-muted)}
+  .rule{width:1px;height:60px;margin:0 auto;background:linear-gradient(transparent,var(--border),transparent)}
+
+  .fig{max-width:940px;margin:34px auto;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#0d0c07}
+  .fig figcaption,.fig .cap{font-size:11px;color:var(--text-muted);padding:11px 16px;border-top:1px solid var(--border);letter-spacing:.03em;line-height:1.6}
+  .fig .cap b{color:var(--text-primary);font-weight:500}
+  .fig.narrow{max-width:680px}
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}}
+
+  .wdg-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;
+    border-bottom:1px solid var(--border);font-size:12px;color:var(--text-muted);letter-spacing:.04em;flex-wrap:wrap}
+  .wdg-head b{color:var(--text-bright);font-weight:500}
+  .tag{font-weight:500;letter-spacing:.12em;padding:3px 10px;border-radius:3px;font-size:11px;white-space:nowrap}
+  .tag.ok{color:#0d0c07;background:var(--sage)} .tag.no{color:#0d0c07;background:var(--coral)}
+  .tag.idle{color:var(--text-muted);border:1px solid var(--border)}
+  .wdg-foot{padding:12px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .btn{font-family:var(--font-display);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    background:transparent;color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:7px 14px;cursor:pointer;transition:.2s}
+  .btn:hover{color:var(--text-bright);border-color:var(--amber)}
+  .btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  .btn:disabled{opacity:.35;cursor:default}
+  .btn.on{color:#0d0c07;background:var(--amber);border-color:var(--amber)}
+
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .two>div{padding:0 0 6px;min-width:0} .two>div+div{border-left:1px solid var(--border)}
+  @media(max-width:680px){.two{grid-template-columns:1fr}.two>div+div{border-left:none;border-top:1px solid var(--border)}}
+  .two h4{font-family:var(--font-display);font-weight:600;font-size:13px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--text-muted);padding:12px 16px 0;text-align:center}
+  .two h4 .s{color:var(--sage)} .two h4 .c{color:var(--coral)}
+
+  /* code panes */
+  pre.code{margin:0;padding:12px 16px 16px;font-family:var(--font-mono);font-size:11.5px;line-height:1.65;
+    color:var(--text-primary);overflow-x:auto;white-space:pre}
+  pre.code .k{color:var(--mauve)} pre.code .f{color:var(--steel-bright)}
+  pre.code .c{color:var(--text-muted)} pre.code .n{color:var(--amber-bright)}
+  pre.code .hl{background:rgba(196,154,60,.13);display:inline-block;width:100%}
+
+  /* grid board */
+  .board{display:block;width:100%;max-width:300px;margin:14px auto 6px}
+  .cellr{fill:var(--raised);stroke:#000;stroke-opacity:.35;stroke-width:.5}
+  .berry0{fill:var(--sage)} .berry1{fill:var(--terra)} .berry2{fill:var(--mauve)}
+  .berry.gone{opacity:.13}
+  .agent{fill:var(--amber-bright);stroke:#0d0c07;stroke-width:1.5}
+  .agent.alt{fill:var(--coral)}
+  .stats{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;padding:2px 12px 12px;font-size:11px;color:var(--text-muted)}
+  .stats b{color:var(--amber-bright);font-weight:500;font-variant-numeric:tabular-nums}
+  .stats .big{color:var(--text-bright);font-size:14px}
+  .ebar{height:6px;border-radius:3px;background:var(--raised);border:1px solid var(--border);
+    max-width:240px;margin:0 auto 10px;overflow:hidden}
+  .ebar i{display:block;height:100%;background:var(--sage);transition:width .18s}
+  .ebar i.low{background:var(--coral)}
+
+  /* controls */
+  .ctl{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;font-size:11px;color:var(--text-muted)}
+  .ctl label{display:flex;align-items:center;gap:8px;letter-spacing:.06em}
+  .ctl input[type=range]{width:130px;accent-color:var(--amber)}
+  .ctl .v{color:var(--amber-bright);font-variant-numeric:tabular-nums;min-width:3ch;display:inline-block}
+  .ctl select{background:var(--raised);color:var(--text-primary);border:1px solid var(--border);
+    border-radius:3px;padding:4px 7px;font-family:var(--font-mono);font-size:11px}
+
+  /* bit row */
+  /* 64 bits as 8 bytes — grouped so the whole word fits one row and the byte
+     boundaries are readable. */
+  .bits{display:flex;flex-wrap:wrap;gap:7px;padding:16px 16px 6px;justify-content:center}
+  .bits .byte{display:flex;gap:1.5px}
+  .bits i{width:6px;height:17px;border-radius:1px;background:var(--raised);border:1px solid var(--border)}
+  .bits i.on{background:var(--amber);border-color:var(--amber)}
+  .bitlab{text-align:center;font-size:10px;color:var(--text-muted);letter-spacing:.14em;padding-bottom:10px}
+  .draws{display:flex;flex-wrap:wrap;gap:10px 26px;justify-content:center;padding:0 16px 14px;font-size:12px;color:var(--text-muted)}
+  .draws b{color:var(--text-bright);font-weight:500;font-variant-numeric:tabular-nums}
+  .kv{font-size:11.5px;color:var(--text-muted);padding:0 16px 12px;text-align:center;word-break:break-all}
+  .kv b{color:var(--steel-bright);font-weight:500}
+
+  /* divergence readout */
+  .diverge{padding:14px 16px;font-size:12px;border-top:1px solid var(--border);background:#0a0906}
+  .diverge .hdr{color:var(--coral);margin-bottom:8px}
+  .diverge .hdr.ok{color:var(--sage)}
+  .diverge table{width:100%;border-collapse:collapse;font-size:11.5px}
+  .diverge td{padding:3px 8px 3px 0;vertical-align:top}
+  .diverge td.p{color:var(--steel-bright);white-space:nowrap}
+  .diverge td.r{color:var(--sage)} .diverge td.f{color:var(--coral)}
+  .diverge .none{color:var(--text-muted)}
+
+  /* bug toggles */
+  .bugs{display:flex;flex-direction:column;gap:0;border-bottom:1px solid var(--border)}
+  .bug{display:flex;align-items:flex-start;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:.18s}
+  .bug:last-child{border-bottom:none}
+  .bug:hover{background:rgba(196,154,60,.04)}
+  .bug .box{flex:none;width:15px;height:15px;border:1px solid var(--border);border-radius:3px;margin-top:2px;position:relative;transition:.18s}
+  .bug.on .box{background:var(--coral);border-color:var(--coral)}
+  .bug.on .box::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;
+    border:solid #0d0c07;border-width:0 2px 2px 0;transform:rotate(45deg)}
+  .bug .t{display:block;font-size:12.5px;color:var(--text-primary);line-height:1.45}
+  .bug.on .t{color:var(--text-bright)}
+  .bug .d{display:block;font-size:11px;color:var(--text-muted);line-height:1.55;margin-top:4px}
+  .bug code{background:var(--raised);border-radius:2px;padding:0 4px;color:var(--steel-bright)}
+
+  /* heatmap */
+  .heat{display:block;width:100%;max-width:620px;margin:16px auto 4px}
+  .heat-legend{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;font-size:11px;color:var(--text-muted);padding:0 16px 14px}
+  .heat-legend .k{display:inline-flex;align-items:center;gap:6px}
+  .heat-legend .sw{width:11px;height:11px;border-radius:2px}
+
+  /* report card */
+  .report{padding:16px 18px;font-size:11.5px;line-height:1.85;overflow-x:auto}
+  .report .row{display:flex;gap:12px;white-space:nowrap}
+  .report .nm{color:var(--text-primary);min-width:31ch;display:inline-block}
+  .report .pass{color:var(--sage)} .report .skip{color:var(--text-muted)}
+  .report .dur{color:var(--text-muted);margin-left:auto}
+  .report hr{border:none;border-top:1px solid var(--border);margin:10px 0}
+  .report .tp{color:var(--text-muted)} .report .tp b{color:var(--amber-bright);font-weight:500}
+  .report .verdict{color:var(--sage);margin-top:10px}
+  .banner{background:#1c0f0c;border:1px solid rgba(255,94,58,.35);border-radius:4px;margin:14px 18px 18px;
+    padding:12px 14px;font-size:11.5px;color:var(--coral);line-height:1.7;white-space:pre-wrap;overflow-x:auto}
+
+  .caveats{max-width:680px;margin:0 auto;padding:4vh 24px 2vh;font-size:12px;color:var(--text-muted);line-height:1.75}
+  .caveats .c{display:flex;gap:10px;margin-bottom:12px}
+  .caveats .c::before{content:"▸";color:var(--amber);flex:none}
+  .caveats b{color:var(--text-primary);font-weight:500}
+
+  .outro{max-width:680px;margin:0 auto;padding:12vh 24px 10vh;text-align:center}
+  .outro h2{font-family:var(--font-display);font-weight:600;font-size:clamp(24px,4vw,38px);color:var(--text-bright);margin-bottom:18px}
+  .outro p{font-size:14px;color:var(--text-muted);margin-bottom:22px}
+  .links{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:26px}
+  .links a{display:inline-flex;align-items:center;padding:10px 20px;background:var(--surface);
+    border:1px solid var(--border);border-radius:3px;color:var(--text-primary);text-decoration:none;
+    font-size:12px;letter-spacing:.12em;text-transform:uppercase;transition:.2s}
+  .links a:hover{border-color:var(--amber);color:var(--amber-bright);background:rgba(196,154,60,.06)}
+  .foot{margin-top:34px;font-size:11px;color:var(--text-muted);letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Simulacrum · differential-testing RL environments</div>
+  <h1>Your fast environment is <span class="accent">lying</span> to you.</h1>
+  <p class="sub">To train an agent at any scale you rewrite your simulator as batched tensor code — a hundred times faster, and a completely different program. If the rewrite is subtly wrong, <b>the loss curve still goes down</b>. You get an agent that is excellent at a game you never meant to build. Every environment on this page is running live in your browser.</p>
+  <div class="scroll-cue">scroll</div>
+</header>
+
+<!-- 1. THE REWRITE -->
+<section class="beat">
+  <div class="eyebrow">The problem</div>
+  <h2>A batched environment isn't an optimization. It's a second program.</h2>
+  <p>The readable version has one agent and an <code>if</code>. The fast version has ten thousand agents and no branches at all — because on a GPU you cannot branch per-instance, so every <code>if</code> becomes arithmetic that computes <b>both</b> outcomes and throws one away.</p>
+  <p>These two are supposed to be the same environment. Nothing checks that they are.</p>
+</section>
+
+<figure class="fig reveal">
+  <div class="two">
+    <div>
+      <h4>reference.py <span class="s">— readable</span></h4>
+<pre class="code"><span class="c"># spec: slip negates the move</span>
+<span class="k">if</span> rng.<span class="f">draw_bernoulli</span>(
+        self.key, state.t,
+        Slots.SLIP, SLIP_P):
+    delta = -delta
+
+<span class="c"># spec: clamp to the line</span>
+position = state.position + delta
+<span class="k">if</span> position &gt; L:
+    position = L
+<span class="k">if</span> position &lt; -L:
+    position = -L</pre>
+    </div>
+    <div>
+      <h4>fast.py <span class="c">— batched</span></h4>
+<pre class="code"><span class="c"># spec: slip negates the move</span>
+slip = rng.<span class="f">draw_bernoulli_torch</span>(
+    self.keys, self.t,
+    Slots.SLIP, SLIP_P)
+delta = torch.<span class="f">where</span>(slip, -delta, delta)
+
+<span class="c"># spec: clamp to the line</span>
+self.position = torch.<span class="f">clamp</span>(
+    self.position + delta,
+    -L, L)</pre>
+    </div>
+  </div>
+  <div class="cap">The same four lines of a spec, twice. <b>torch.where evaluates both branches for every instance</b> — which is safe only if both are always computable, and only if the random draw the discarded branch consumed didn't disturb anything. Hold that thought.</div>
+</figure>
+
+<div class="rule"></div>
+
+<!-- 2. THE RNG -->
+<section class="beat">
+  <div class="eyebrow">The keystone</div>
+  <h2>Two programs can't agree unless they roll the same dice.</h2>
+  <p>Here is the problem that sinks most attempts before they start. The readable version draws randomness one instance at a time. The batched version draws for ten thousand at once and discards most of them. With an ordinary random generator — one that carries a <b>stream position</b> — those discarded draws advance the state, and the two programs desynchronise permanently on the first step.</p>
+  <p>Simulacrum removes the stream entirely. Every random decision is a pure function of four numbers:</p>
+  <p style="text-align:center"><code>bits = hash(episode_key, step, slot, index)</code></p>
+  <p>No history, no cursor, nothing to keep in sync. A <span class="amber">slot</span> names <i>which</i> decision this is; <span class="amber">index</span> separates repeats of the same decision — one per berry, say. Move the sliders: the draw depends on those four numbers and <b>nothing else</b>.</p>
+</section>
+
+<figure class="fig narrow reveal">
+  <div class="wdg-head"><span>Counter-based draw · <b>slots from forager's spec.md</b></span><span class="tag idle" id="rng_tag">live</span></div>
+  <div class="ctl">
+    <label>seed <input type="range" id="r_seed" min="0" max="64" value="1234" step="1"><span class="v" id="r_seed_v">1234</span></label>
+    <label>episode <input type="range" id="r_ep" min="0" max="12" value="3"><span class="v" id="r_ep_v">3</span></label>
+  </div>
+  <div class="ctl">
+    <label>step <input type="range" id="r_step" min="0" max="80" value="7"><span class="v" id="r_step_v">7</span></label>
+    <label>slot
+      <select id="r_slot">
+        <option value="0">0 · AGENT_X</option>
+        <option value="1">1 · AGENT_Y</option>
+        <option value="2">2 · BERRY_X</option>
+        <option value="3">3 · BERRY_Y</option>
+        <option value="4">4 · BERRY_KIND</option>
+        <option value="5" selected>5 · GUST</option>
+      </select>
+    </label>
+    <label>index <input type="range" id="r_idx" min="0" max="5" value="0"><span class="v" id="r_idx_v">0</span></label>
+  </div>
+  <div class="bits" id="r_bits"></div>
+  <div class="bitlab">64 bits out — a pure function of the four numbers above</div>
+  <div class="draws">
+    <span>uniform <b id="r_unif">—</b></span>
+    <span>randint(8) <b id="r_rint">—</b></span>
+    <span>bernoulli(0.15) <b id="r_bern">—</b></span>
+  </div>
+  <div class="kv">episode_key(<span id="r_kseed">1234</span>, <span id="r_kep">3</span>) = <b id="r_key">—</b></div>
+  <div class="wdg-foot">
+    <span id="r_order">Draw order: sequential</span>
+    <button class="btn" id="r_shuffle">Draw them out of order</button>
+  </div>
+</figure>
+
+<section class="beat">
+  <p>Nothing moved. That is the entire trick, and three hard problems fall out of it at once: the batched code can <b>draw for all ten thousand instances and mask</b>, because a discarded draw was never part of a sequence; an episode that ends early can <b>re-key and restart in place</b> without telling anyone; and a port to another array framework is mechanical, because there is no hidden state to port.</p>
+</section>
+
+<div class="rule"></div>
+
+<!-- 3. FORAGER LIVE -->
+<section class="beat">
+  <div class="eyebrow">The environment</div>
+  <h2>Meet forager. It's small on purpose.</h2>
+  <p>An 8×8 grid. Six berries, three kinds worth <span class="sage">0.10</span>, <span class="terra" style="color:var(--terra)">0.15</span> and <span style="color:var(--mauve)">0.30</span> energy. You start with 1.0 energy and lose 0.02 a step, so you have fifty steps unless you eat. Each step you pick a compass direction — and <b>15% of the time a gust rotates your move 90° clockwise</b>. That gust is the stochasticity that makes agreeing on randomness hard.</p>
+  <p class="dim">The JavaScript below is a <b>third implementation</b> of this environment, written in a language with no int64 and no tensors, from the same spec.md the two Python versions were written from. It is checked against them step by step.</p>
+</section>
+
+<figure class="fig narrow reveal">
+  <div class="wdg-head"><span>forager · seed <b id="f_seed">42</b></span><span class="tag idle" id="f_tag">t = 0</span></div>
+  <svg class="board" id="f_board" viewBox="0 0 240 240" role="img" aria-label="forager grid"></svg>
+  <div class="ebar"><i id="f_ebar" style="width:100%"></i></div>
+  <div class="stats">
+    <span>energy <b id="f_energy">1.000</b></span>
+    <span>berries left <b id="f_left">6</b>/6</span>
+    <span>return <b class="big" id="f_ret">0.00</b></span>
+  </div>
+  <div class="wdg-foot">
+    <span id="f_note">Random actions, same stream the validation battery uses.</span>
+    <span style="display:flex;gap:8px">
+      <button class="btn" id="f_step">Step</button>
+      <button class="btn" id="f_play">Play</button>
+      <button class="btn" id="f_new">New seed</button>
+    </span>
+  </div>
+</figure>
+
+<div class="rule"></div>
+
+<!-- 4. THE BREAK-IT LAB -->
+<section class="beat">
+  <div class="eyebrow">The test</div>
+  <h2>Now break it on purpose.</h2>
+  <p>Two copies run side by side on the same seed and the same actions: the readable one on the left, the batched one on the right. Switch on a bug and watch them come apart — the agents separate, the berry sets drift, and the runner reports <b>the first step where they disagree and the exact field that did it</b>.</p>
+  <p>These are not invented mistakes. Each one is a real way a scalar environment gets mistranslated into tensors, and <span class="coral">every one of them leaves a perfectly trainable environment behind</span>.</p>
+</section>
+
+<figure class="fig reveal">
+  <div class="wdg-head"><span>Differential test · <b>300 steps</b>, seed 42</span><span class="tag ok" id="d_tag">identical</span></div>
+  <div class="bugs" id="d_bugs"></div>
+  <div class="two">
+    <div>
+      <h4>reference <span class="s">— from spec.md</span></h4>
+      <svg class="board" id="d_ref" viewBox="0 0 240 240" role="img" aria-label="reference grid"></svg>
+    </div>
+    <div>
+      <h4>batched <span class="c">— with your bugs</span></h4>
+      <svg class="board" id="d_fast" viewBox="0 0 240 240" role="img" aria-label="batched grid"></svg>
+    </div>
+  </div>
+  <div class="wdg-foot">
+    <span id="d_pos">showing step 0</span>
+    <span style="display:flex;gap:8px">
+      <button class="btn" id="d_back">◀</button>
+      <button class="btn" id="d_fwd">▶</button>
+      <button class="btn" id="d_jump">Jump to divergence</button>
+    </span>
+  </div>
+  <div class="diverge" id="d_out"></div>
+</figure>
+
+<div class="rule"></div>
+
+<!-- 5. BATCH INDEPENDENCE -->
+<section class="beat">
+  <div class="eyebrow">The blind spot</div>
+  <h2>And now the bug that test cannot see.</h2>
+  <p>The differential test runs <b>one</b> instance against the reference, because the reference only knows how to be one instance. That is a real hole, and here is what falls through it.</p>
+  <p>Somewhere in the batched code, a mask of shape <code>[N]</code> meets a quantity of shape <code>[N, 1]</code>. In NumPy and PyTorch that is not an error — it is a <b>broadcast</b>, and it silently produces an <code>[N, N]</code> matrix. A reduction downstream collapses it back to a perfectly plausible <code>[N]</code>. One character of difference:</p>
+</section>
+
+<figure class="fig narrow reveal">
+  <div class="wdg-head"><span>The one-character bug</span><span class="tag no">silent</span></div>
+<pre class="code"><span class="c"># correct</span>
+alive_count = self.alive.<span class="f">sum</span>(-1)
+terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
+<span class="c">#              [N]                 [N]            -&gt; [N]  ✓</span>
+
+<span class="c"># one keyword added</span>
+alive_count = self.alive.<span class="f">sum</span>(-1, <span class="n">keepdim=True</span>)
+terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
+<span class="c">#              [N, 1]              [N]            -&gt; [N, N]  ✗</span></pre>
+  <div class="cap">Instance <b>i</b> now terminates as soon as <b>any</b> instance in the batch runs out of energy. Episodes end early, all over the batch, for reasons that have nothing to do with the agent.</div>
+</figure>
+
+<section class="beat">
+  <p>Now count the instances the differential test uses. <b>One.</b> And with one instance, that accidental matrix is 1×1 — which is exactly the right answer. The bug is not merely missed; it is <span class="coral">mathematically invisible</span> at the only batch size that test ever runs.</p>
+  <p>So the battery adds a second test with no reference implementation in it at all. Run instance <i>i</i> alone. Run it again inside a batch of eight. Demand the two be bit-identical. Drag the batch size:</p>
+</section>
+
+<figure class="fig reveal">
+  <div class="wdg-head"><span>Batch independence · solo run vs in-batch run</span><span class="tag ok" id="b_tag">clean</span></div>
+  <div class="ctl">
+    <label>batch size N <input type="range" id="b_n" min="1" max="8" value="1"><span class="v" id="b_n_v">1</span></label>
+    <label style="margin-left:auto"><button class="btn" id="b_bug">Inject the keepdim bug</button></label>
+  </div>
+  <svg class="heat" id="b_heat" viewBox="0 0 620 200" role="img" aria-label="batch independence heatmap"></svg>
+  <div class="heat-legend">
+    <span class="k"><span class="sw" style="background:var(--sage)"></span>matches its solo run</span>
+    <span class="k"><span class="sw" style="background:var(--coral)"></span>diverged — contaminated by a neighbour</span>
+    <span class="k"><span class="sw" style="background:var(--raised);border:1px solid var(--border)"></span>not in batch</span>
+  </div>
+  <div class="cap" id="b_cap">Each row is one instance, each column one of 120 steps.</div>
+</figure>
+
+<div class="rule"></div>
+
+<!-- 6. THE GATE -->
+<section class="beat">
+  <div class="eyebrow">The point</div>
+  <h2>None of this is worth anything as a suggestion.</h2>
+  <p>Ten tests run as a gate, not a habit. They write a report; training scripts read it and <b>refuse to start</b> if it is missing, failing, or older than the environment's source files. An environment without a fresh passing report is not eligible for training.</p>
+  <p class="dim">This is the real output of <code>simulacrum validate examples/forager</code> — the environment you have been playing with above.</p>
+</section>
+
+<figure class="fig reveal">
+  <div class="wdg-head"><span>validation_report.json · <b>forager</b></span><span class="tag ok">PASS</span></div>
+  <div class="report">
+    <div class="row"><span class="nm">test_spec_contract</span><span class="pass">PASS</span><span class="dur">0.01s</span></div>
+    <div class="row"><span class="nm">test_differential</span><span class="pass">PASS</span><span class="dur">1.83s</span></div>
+    <div class="row"><span class="nm">test_batch_independence</span><span class="pass">PASS</span><span class="dur">1.69s</span></div>
+    <div class="row"><span class="nm">test_invariant_sweep</span><span class="pass">PASS</span><span class="dur">2.04s</span></div>
+    <div class="row"><span class="nm">test_auto_reset</span><span class="pass">PASS</span><span class="dur">6.53s</span></div>
+    <div class="row"><span class="nm">test_determinism</span><span class="pass">PASS</span><span class="dur">0.44s</span></div>
+    <div class="row"><span class="nm">test_replay</span><span class="pass">PASS</span><span class="dur">0.19s</span></div>
+    <div class="row"><span class="nm">test_scripted_policies</span><span class="pass">PASS</span><span class="dur">0.04s</span></div>
+    <div class="row"><span class="nm">test_benchmark_factory_parity</span><span class="pass">PASS</span><span class="dur">11.37s</span></div>
+    <div class="row"><span class="nm">test_throughput</span><span class="pass">PASS</span><span class="dur">31.22s</span></div>
+    <hr>
+    <div class="tp">reference &nbsp;&nbsp;<b>174,770</b> steps/s</div>
+    <div class="tp">batched n=1024 &nbsp;&nbsp;<b>853,912</b> steps/s</div>
+    <div class="tp">batched n=8192 &nbsp;&nbsp;<b>2,277,929</b> steps/s &nbsp;&nbsp;— <b>13×</b> the reference</div>
+    <div class="verdict">overall: PASS — eligible for training</div>
+  </div>
+  <div class="banner">!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! VALIDATION GATE: env source files modified after the validation
+!! report was written — report is STALE
+!! Run: simulacrum validate examples/forager
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!</div>
+  <div class="cap">What you get for editing <code>fast.py</code> and going straight back to training. With <b>strict=True</b> it raises instead of warning.</div>
+</figure>
+
+<div class="caveats">
+  <div class="c"><span><b>Two implementations are evidence, not proof.</b> If both were written from the same spec and both agree, either the spec was implemented correctly twice or the same misreading happened twice in two very different programming styles. The second is possible. It is just much less likely than getting it wrong once — and it is not a claim of formal verification.</span></div>
+  <div class="c"><span><b>The speedup ratio is the least interesting number here.</b> forager's reference implementation is itself fast — about 170,000 steps/s of plain Python — which deflates the ratio to 13×. The absolute figure, 2.3 million steps/s, is the one that matters, and it moved between 13× and 18× across runs on the same machine.</span></div>
+  <div class="c"><span><b>This page's JavaScript is a third implementation, not an independent audit.</b> It was written from the same spec.md by the same author, so it does not carry the weight of a genuinely independent port. It is checked against the Python reference across 1,500 steps and five seeds — states, rewards, terminations and float32 observations all bit-identical — and the RNG is checked against 2,040 known-answer vectors. What that demonstrates is that the spec is precise enough to reimplement from, in a language with neither int64 nor tensors.</span></div>
+  <div class="c"><span><b>forager is a demo, not a benchmark.</b> Eight by eight, six berries, one stochastic event. It exists to exercise vector state, per-item random draws and masked collection — the things a real environment needs and a scalar toy cannot show. It is not a claim about how the framework behaves on something large.</span></div>
+</div>
+
+<div class="rule"></div>
+
+<section class="outro">
+  <h2>Write it twice. Prove they agree.</h2>
+  <p>That is the whole idea, and the whole cost. You write the environment once so a human can read it, once so a GPU can run it, and let a machine hold them to the same spec — instead of finding out six weeks into a training run that your simulator had a favourite corner.</p>
+  <div class="links">
+    <a href="https://github.com/orbitope/simulacrum">Source</a>
+    <a href="guide/">Documentation</a>
+    <a href="architecture.md">Architecture</a>
+  </div>
+  <p class="foot">Simulacrum · Orbitope</p>
+</section>
+
+</div>
+
+<script src="rng.js"></script>
+<script src="forager.js"></script>
+<script>
+(function(){
+"use strict";
+var RNG = window.SimRNG, F = window.SimForager;
+
+/* ---- known-answer check: if this page's RNG ever drifts from the Python
+   framework, say so loudly rather than showing plausible-looking numbers. ---- */
+var RNG_OK = (function(){
+  try{
+    var k = RNG.episodeKey(1234, 3);
+    return k.toString() === '15570406044200102918'
+        && RNG.drawBits(k, 7, 1).toString() === '5836041238337677608'
+        && RNG.drawBits(k, 7, 5).toString() === '10406080438901372403'
+        && RNG.drawUniform(k, 7, 5) === 0.5641147509457889;
+  }catch(e){ return false; }
+})();
+
+/* progress bar */
+var prog=document.getElementById('progress');
+addEventListener('scroll',function(){var h=document.documentElement;
+  prog.style.width=(h.scrollTop/(h.scrollHeight-h.clientHeight)*100)+'%';},{passive:true});
+
+/* reveal */
+if('IntersectionObserver' in window){
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){
+    if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},
+    {rootMargin:'0px 0px -10% 0px',threshold:.1});
+  document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+}else{document.querySelectorAll('.reveal').forEach(function(el){el.classList.add('in');});}
+
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);
+  for(var k in attrs) if(attrs.hasOwnProperty(k)) e.setAttribute(k,attrs[k]);
+  return e;}
+
+/* ---------- shared board renderer (8x8, y up) ---------- */
+var CELL=28, PAD=4;
+function drawBoard(svg, st, opts){
+  opts=opts||{};
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  var x,y;
+  for(y=0;y<F.G;y++) for(x=0;x<F.G;x++){
+    svg.appendChild(el('rect',{x:PAD+x*CELL+1, y:PAD+(F.G-1-y)*CELL+1,
+      width:CELL-2, height:CELL-2, rx:3, 'class':'cellr'}));
+  }
+  if(!st) return;
+  for(var k=0;k<F.K;k++){
+    var c=st.berries[k];
+    var cls='berry berry'+st.kinds[k]+(st.alive[k]?'':' gone');
+    svg.appendChild(el('circle',{cx:PAD+c[0]*CELL+CELL/2, cy:PAD+(F.G-1-c[1])*CELL+CELL/2,
+      r:6.5, 'class':cls}));
+  }
+  var a=el('rect',{x:PAD+st.pos[0]*CELL+6, y:PAD+(F.G-1-st.pos[1])*CELL+6,
+    width:CELL-12, height:CELL-12, rx:3, 'class':'agent'+(opts.alt?' alt':'')});
+  svg.appendChild(a);
+  if(opts.markCells){
+    opts.markCells.forEach(function(c){
+      svg.appendChild(el('rect',{x:PAD+c[0]*CELL+1, y:PAD+(F.G-1-c[1])*CELL+1,
+        width:CELL-2, height:CELL-2, rx:3, fill:'none',
+        stroke:'var(--coral)', 'stroke-width':1.5}));
+    });
+  }
+}
+
+/* ================= 1. RNG PLAYGROUND ================= */
+(function(){
+  var bitsEl=document.getElementById('r_bits');
+  if(!bitsEl) return;
+  var ids=['seed','ep','step','idx'], inp={}, out={};
+  ids.forEach(function(i){inp[i]=document.getElementById('r_'+i);
+    out[i]=document.getElementById('r_'+i+'_v');});
+  var slotSel=document.getElementById('r_slot');
+  var tag=document.getElementById('rng_tag');
+  // seed slider is coarse; map its 0..64 range onto a few readable seeds
+  var SEEDS=[0,1,7,42,1234,9001,99999];
+  var cells=[];
+  for(var g=0;g<8;g++){
+    var byte=document.createElement('div'); byte.className='byte';
+    for(var i=0;i<8;i++){var b=document.createElement('i');byte.appendChild(b);cells.push(b);}
+    bitsEl.appendChild(byte);
+  }
+
+  var shuffled=false;
+  function render(){
+    var seed=SEEDS[Math.floor(inp.seed.value/65*SEEDS.length)] || SEEDS[SEEDS.length-1];
+    var ep=+inp.ep.value, step=+inp.step.value, idx=+inp.idx.value, slot=+slotSel.value;
+    out.seed.textContent=seed; out.ep.textContent=ep;
+    out.step.textContent=step; out.idx.textContent=idx;
+
+    var key=RNG.episodeKey(seed,ep);
+    // Drawing "out of order" must not change anything — that is the point.
+    if(shuffled){
+      RNG.drawBits(key, (step+13)%80, (slot+2)%6, (idx+3)%6);
+      RNG.drawBits(key, (step+41)%80, (slot+4)%6, (idx+1)%6);
+    }
+    var bits=RNG.drawBits(key, step, slot, idx);
+    var s=bits.toString(2); while(s.length<64) s='0'+s;
+    for(var j=0;j<64;j++) cells[j].className = s[j]==='1' ? 'on' : '';
+
+    document.getElementById('r_unif').textContent=RNG.drawUniform(key,step,slot,idx).toFixed(6);
+    document.getElementById('r_rint').textContent=RNG.drawRandint(key,step,slot,8,idx);
+    document.getElementById('r_bern').textContent=RNG.drawBernoulli(key,step,slot,0.15,idx)?'true':'false';
+    document.getElementById('r_key').textContent=key.toString();
+    document.getElementById('r_kseed').textContent=seed;
+    document.getElementById('r_kep').textContent=ep;
+    tag.textContent = RNG_OK ? 'matches python' : 'RNG CHECK FAILED';
+    tag.className = 'tag ' + (RNG_OK ? 'ok' : 'no');
+  }
+  ids.forEach(function(i){inp[i].addEventListener('input',render);});
+  slotSel.addEventListener('change',render);
+  document.getElementById('r_shuffle').addEventListener('click',function(){
+    shuffled=!shuffled;
+    document.getElementById('r_order').textContent = shuffled
+      ? 'Draw order: shuffled — two unrelated draws taken first. Bits unchanged.'
+      : 'Draw order: sequential';
+    this.textContent = shuffled ? 'Back to sequential' : 'Draw them out of order';
+    this.classList.toggle('on', shuffled);
+    render();
+  });
+  render();
+})();
+
+/* ================= 2. FORAGER LIVE ================= */
+(function(){
+  var svg=document.getElementById('f_board');
+  if(!svg) return;
+  var seed=42, st=F.reset(seed,0,{}), ret=0, timer=null, ep=0;
+
+  function paint(){
+    drawBoard(svg, st);
+    var left=F.countAlive(st.alive);
+    document.getElementById('f_energy').textContent=st.energy.toFixed(3);
+    document.getElementById('f_left').textContent=left;
+    document.getElementById('f_ret').textContent=ret.toFixed(2);
+    document.getElementById('f_tag').textContent='t = '+st.t;
+    document.getElementById('f_seed').textContent=seed;
+    var bar=document.getElementById('f_ebar');
+    var pct=Math.max(0,Math.min(1,st.energy/1.0))*100;
+    bar.style.width=pct+'%';
+    bar.className = st.energy<0.2 ? 'low' : '';
+  }
+  function one(){
+    var a=RNG.sampleAction(seed, st.t, 4);
+    var r=F.step(st, a, {});
+    ret+=r.reward; st=r.state;
+    if(r.terminated){
+      var why = F.countAlive(st.alive)===0 ? 'all berries collected'
+              : (st.energy<=0 ? 'energy exhausted' : 'step cap');
+      document.getElementById('f_note').textContent='Episode ended — '+why+'. Auto-reset re-keys in place.';
+      paint();
+      ep++; st=F.reset(seed,ep,{}); ret=0;
+      return true;
+    }
+    paint(); return false;
+  }
+  document.getElementById('f_step').addEventListener('click',function(){one();});
+  document.getElementById('f_new').addEventListener('click',function(){
+    seed=(seed*7919+13)%100000; ep=0; st=F.reset(seed,0,{}); ret=0;
+    document.getElementById('f_note').textContent='Random actions, same stream the validation battery uses.';
+    paint();
+  });
+  var playBtn=document.getElementById('f_play');
+  playBtn.addEventListener('click',function(){
+    if(timer){clearInterval(timer);timer=null;playBtn.textContent='Play';playBtn.classList.remove('on');return;}
+    playBtn.textContent='Pause'; playBtn.classList.add('on');
+    timer=setInterval(function(){ one(); },220);
+  });
+  paint();
+})();
+
+/* ================= 3. BREAK-IT DIFFERENTIAL LAB ================= */
+(function(){
+  var host=document.getElementById('d_bugs');
+  if(!host) return;
+  var BUGS=[
+    {id:'gustPostMove', t:'Gust keyed on the wrong step',
+     d:'The spec keys the gust draw on the <code>t</code> before the move. This keys it on <code>t + 1</code>. Every draw is still uniform, so the environment looks completely healthy.'},
+    {id:'berryIndexZero', t:'Every berry drawn at index 0',
+     d:'The <code>index</code> word is what separates six draws of one slot. Drop it and all six berries stack on a single cell.'},
+    {id:'clampBeforeRotate', t:'Clamp applied before the rotation',
+     d:'Spec step 3 clamps <i>after</i> the gust rotates the move. Swapping the order lets a rotated step walk off the edge of the board.'},
+    {id:'energyFloat64', t:'Energy accumulated in float64',
+     d:'The spec makes energy arithmetic float32. Skipping the narrowing is dtype drift — values stay plausible and differ only in the low bits.'}
+  ];
+  var active={}, seed=42, res=null, cursor=0;
+
+  BUGS.forEach(function(b){
+    var d=document.createElement('div'); d.className='bug'; d.tabIndex=0;
+    d.innerHTML='<span class="box"></span><span><span class="t">'+b.t+'</span><span class="d">'+b.d+'</span></span>';
+    function toggle(){
+      if(active[b.id]) delete active[b.id]; else active[b.id]=true;
+      d.classList.toggle('on', !!active[b.id]);
+      run();
+    }
+    d.addEventListener('click',toggle);
+    d.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}});
+    host.appendChild(d);
+  });
+
+  function run(){
+    res=F.runDifferential(seed, 300, active);
+    cursor = res.divergence ? Math.max(0, res.divergence.step) : 0;
+    paint(); report();
+  }
+  function paint(){
+    var fr=res.trace[cursor];
+    var refSt = fr ? fr.ref : F.reset(seed,0,{});
+    var fastSt = fr ? fr.fast : F.reset(seed,0,active);
+    drawBoard(document.getElementById('d_ref'), refSt);
+    drawBoard(document.getElementById('d_fast'), fastSt, {alt:true});
+    document.getElementById('d_pos').textContent =
+      'showing step '+cursor+(res.divergence && cursor===res.divergence.step?'  ← first divergence':'');
+  }
+  function report(){
+    var out=document.getElementById('d_out'), tag=document.getElementById('d_tag');
+    if(!res.divergence){
+      tag.textContent='identical'; tag.className='tag ok';
+      out.innerHTML='<div class="hdr ok">300 steps, no divergence.</div>'+
+        '<div class="none">Reference and batched agree on every state, reward, termination flag and observation — including across episode boundaries.</div>';
+      return;
+    }
+    tag.textContent='diverged'; tag.className='tag no';
+    var d=res.divergence;
+    var html='<div class="hdr">First divergence at step '+d.step+' ('+d.kind+'):</div>';
+    if(d.detail) html+='<div class="none">'+d.detail+'</div>';
+    if(d.diffs.length){
+      html+='<table><tr><td class="p">field</td><td class="r">reference</td><td class="f">batched</td></tr>';
+      d.diffs.slice(0,8).forEach(function(x){
+        html+='<tr><td class="p">'+x.path+'</td><td class="r">'+x.ref+'</td><td class="f">'+x.fast+'</td></tr>';
+      });
+      html+='</table>';
+      if(d.diffs.length>8) html+='<div class="none">…and '+(d.diffs.length-8)+' more fields</div>';
+    }
+    out.innerHTML=html;
+  }
+  document.getElementById('d_back').addEventListener('click',function(){
+    cursor=Math.max(0,cursor-1); paint();});
+  document.getElementById('d_fwd').addEventListener('click',function(){
+    cursor=Math.min(res.trace.length-1,cursor+1); paint();});
+  document.getElementById('d_jump').addEventListener('click',function(){
+    if(res.divergence){cursor=res.divergence.step; paint();}});
+  run();
+})();
+
+/* ================= 4. BATCH INDEPENDENCE HEATMAP ================= */
+(function(){
+  var svg=document.getElementById('b_heat');
+  if(!svg) return;
+  var STEPS=120, SEEDS=[5000,5001,5002,5003,5004,5005,5006,5007];
+  var n=1, bug=false;
+  var nIn=document.getElementById('b_n'), nOut=document.getElementById('b_n_v');
+  var bugBtn=document.getElementById('b_bug'), tag=document.getElementById('b_tag');
+  var cap=document.getElementById('b_cap');
+
+  function render(){
+    nOut.textContent=n;
+    var bugs = bug ? {broadcastLeak:true} : {};
+    var seeds=SEEDS.slice(0,n);
+    var batch=F.rolloutBatch(seeds, STEPS, bugs);
+    var rows=[], anyBad=false, firstBad=null;
+    for(var i=0;i<n;i++){
+      var solo=F.rolloutSolo(seeds[i], STEPS, bugs), row=[];
+      for(var t=0;t<STEPS;t++){
+        var same = JSON.stringify(F.toJSON(solo[t].state))===JSON.stringify(F.toJSON(batch[i][t].state))
+                && solo[t].terminated===batch[i][t].terminated;
+        row.push(same);
+        if(!same){ anyBad=true; if(firstBad===null) firstBad={i:i,t:t}; }
+      }
+      rows.push(row);
+    }
+
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    var W=620, LEFT=54, TOP=14, cw=(W-LEFT-10)/STEPS, rh=18, gap=3;
+    for(var r=0;r<8;r++){
+      var lab=el('text',{x:LEFT-10,y:TOP+r*(rh+gap)+13,fill:'#6A6358','font-size':'10',
+        'font-family':"'JetBrains Mono',monospace",'text-anchor':'end'});
+      lab.textContent='inst '+r; svg.appendChild(lab);
+      for(var t2=0;t2<STEPS;t2++){
+        var fill='var(--raised)', op='1';
+        if(r<n){ fill = rows[r][t2] ? 'var(--sage)' : 'var(--coral)'; op = rows[r][t2] ? '.55' : '1'; }
+        svg.appendChild(el('rect',{x:LEFT+t2*cw, y:TOP+r*(rh+gap), width:Math.max(cw-.5,.8),
+          height:rh, fill:fill, opacity:op}));
+      }
+    }
+    var ax=el('text',{x:LEFT,y:TOP+8*(rh+gap)+12,fill:'#6A6358','font-size':'10',
+      'font-family':"'JetBrains Mono',monospace"});
+    ax.textContent='step 0'; svg.appendChild(ax);
+    var ax2=el('text',{x:W-10,y:TOP+8*(rh+gap)+12,fill:'#6A6358','font-size':'10',
+      'font-family':"'JetBrains Mono',monospace",'text-anchor':'end'});
+    ax2.textContent='step '+STEPS; svg.appendChild(ax2);
+
+    if(!bug){
+      tag.textContent='clean'; tag.className='tag ok';
+      cap.innerHTML='No bug injected. Every instance matches its solo run at every step, at any batch size — which is what passing looks like.';
+    }else if(!anyBad){
+      tag.textContent='n = 1 · invisible'; tag.className='tag idle';
+      cap.innerHTML='<b>The bug is switched on.</b> At N = 1 the accidental <code>[N, N]</code> matrix is 1×1, so the wrong code and the right code compute the same thing. This is the batch size the differential test runs at. Drag N upward.';
+    }else{
+      tag.textContent='leak detected'; tag.className='tag no';
+      cap.innerHTML='<b>Same bug, larger batch.</b> Instance '+firstBad.i+' first diverges from its own solo run at step '+firstBad.t+
+        ' — its episode was ended by a <i>different</i> instance running out of energy. Nothing about instance '+firstBad.i+
+        ' changed; only its neighbours did.';
+    }
+  }
+  nIn.addEventListener('input',function(){n=+nIn.value; render();});
+  bugBtn.addEventListener('click',function(){
+    bug=!bug; bugBtn.classList.toggle('on',bug);
+    bugBtn.textContent = bug ? 'Remove the keepdim bug' : 'Inject the keepdim bug';
+    render();
+  });
+  render();
+})();
+
+})();
+</script>
+</body>
+</html>
