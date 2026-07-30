@@ -5,24 +5,33 @@ tensor simulations, with correctness guaranteed by differential testing
 against slow, readable reference implementations.
 
 **[→ Read the interactive article](https://orbitope.github.io/simulacrum/)** —
-what this is for and why it works, with the environment running live in your
-browser.
+how to vectorize an environment without giving up the one you can read, with
+everything running live in your browser.
 
 ## The idea
 
-To train at any scale you rewrite your simulator as batched tensor code. That
-rewrite is a hundred times faster and a completely different program: every
-`if` becomes arithmetic that computes both outcomes and discards one. If it is
-subtly wrong, the loss curve still goes down, and you get an agent that is
-excellent at a game you never meant to build.
+In most RL training loops, collecting experience is the bottleneck. Rewriting
+the simulator so every instance advances in one tensor operation removes that
+ceiling — on the examples here, `toywalk` goes from 385,000 steps/s to 35.3
+million, a 92× speedup.
 
-So you write the environment **twice** — a readable single-instance
-`reference.py` and a batched `fast.py` — both from a single `spec.md`, and
-**never from each other**. A validation battery runs them side by side and
-demands bit-identical behaviour. If they agree, either you implemented the
-spec correctly twice, or you made the same misreading twice in two very
-different programming styles. Nothing trains against an environment that has
-not passed.
+The problem is that the fast version is a *different program*: every `if`
+becomes arithmetic that computes both outcomes and discards one. Nothing
+checks that it is still the same environment, and a subtly wrong simulator
+still produces a training curve that goes down. So the usual choice is to keep
+the version you can reason about and train slowly, or take the speed and stop
+being able to explain your results.
+
+Simulacrum removes the choice. You write the environment **twice** — a
+readable single-instance `reference.py` and a batched `fast.py` — both from a
+single `spec.md`, and **never from each other**. A validation battery runs them
+side by side and demands bit-identical behaviour. If they agree, either you
+implemented the spec correctly twice, or you made the same misreading twice in
+two very different programming styles.
+
+The readable implementation stays the thing you debug against and explain
+results with; the fast one is provably the same environment. Nothing trains
+against an environment that has not passed.
 
 ## Install
 

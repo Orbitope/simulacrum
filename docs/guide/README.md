@@ -3,8 +3,9 @@
 How to build your own environment with simulacrum, and how to keep it honest.
 
 New here? The [interactive article](https://orbitope.github.io/simulacrum/)
-explains what this framework is for and why it works, with the environment
-running live in your browser. This guide is the dry version.
+makes the case for vectorizing your environment without giving up the readable
+one, with everything running live in your browser. This guide is the dry
+version.
 
 ## Which document do I want
 

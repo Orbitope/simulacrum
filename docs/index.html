@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Simulacrum — Your Fast Environment Is Lying to You</title>
-<meta name="description" content="A batched RL environment is a rewrite, not an optimization — and nothing in a training curve tells you when the rewrite is wrong. Every environment on this page runs live in your browser.">
-<meta property="og:title" content="Simulacrum — Your Fast Environment Is Lying to You">
-<meta property="og:description" content="Write the environment twice. Prove the two agree bit-for-bit. An interactive tour of differential-testing RL simulators.">
+<title>Simulacrum — Make Your RL Environment 100× Faster Without Breaking It</title>
+<meta name="description" content="Vectorizing an RL environment makes training orders of magnitude faster and quietly risks correctness. Keep the readable version, add a batched one, and prove they are the same environment. Runs live in your browser.">
+<meta property="og:title" content="Simulacrum — Make Your RL Environment 100× Faster Without Breaking It">
+<meta property="og:description" content="How to vectorize a readable RL environment without giving up the ability to trust it — with bit-identical guarantees you can check.">
 <meta property="og:type" content="article">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23111009'/%3E%3Cpolygon points='32,5 55,18.5 55,45.5 32,59 9,45.5 9,18.5' fill='none' stroke='%23E8C068' stroke-width='4.4' stroke-linejoin='round'/%3E%3Cpolygon points='32,18 43.5,24.7 43.5,39.3 32,46 20.5,39.3 20.5,24.7' fill='none' stroke='%236B7A8D' stroke-width='1.3' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -77,6 +77,16 @@
   .btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
   .btn:disabled{opacity:.35;cursor:default}
   .btn.on{color:#0d0c07;background:var(--amber);border-color:var(--amber)}
+
+  .toggle-row{display:flex;border-bottom:1px solid var(--border)}
+  .toggle{flex:1;padding:12px 6px;font-family:var(--font-display);font-weight:600;font-size:12px;
+    letter-spacing:.08em;text-transform:uppercase;text-align:center;cursor:pointer;background:transparent;
+    color:var(--text-muted);border:none;border-right:1px solid var(--border);
+    border-bottom:2px solid transparent;transition:.2s}
+  .toggle:last-child{border-right:none}
+  .toggle.active{color:var(--text-bright);border-bottom-color:var(--amber);background:var(--surface)}
+  .toggle:hover{color:var(--text-primary)}
+  .toggle:focus-visible{outline:2px solid var(--amber);outline-offset:-2px}
 
   .two{display:grid;grid-template-columns:1fr 1fr;gap:0}
   .two>div{padding:0 0 6px;min-width:0} .two>div+div{border-left:1px solid var(--border)}
@@ -191,18 +201,43 @@
 <div class="wrap">
 
 <header class="hero">
-  <div class="kicker">Simulacrum · differential-testing RL environments</div>
-  <h1>Your fast environment is <span class="accent">lying</span> to you.</h1>
-  <p class="sub">To train an agent at any scale you rewrite your simulator as batched tensor code — a hundred times faster, and a completely different program. If the rewrite is subtly wrong, <b>the loss curve still goes down</b>. You get an agent that is excellent at a game you never meant to build. Every environment on this page is running live in your browser.</p>
+  <div class="kicker">Simulacrum · vectorizing RL environments</div>
+  <h1>Make your environment <span class="accent">100× faster</span>. Keep the one you can read.</h1>
+  <p class="sub">A readable Python environment steps about <b>385,000</b> times a second. The same environment written as batched tensors steps <b>35 million</b> times a second — and it is a different program, which is why most people never trust it enough to throw the readable one away. This is how you keep both and <b>prove they are the same environment</b>. Everything on this page is running live in your browser.</p>
   <div class="scroll-cue">scroll</div>
 </header>
 
-<!-- 1. THE REWRITE -->
+<!-- 1. THE MOTIVATION: SPEED -->
 <section class="beat">
-  <div class="eyebrow">The problem</div>
-  <h2>A batched environment isn't an optimization. It's a second program.</h2>
-  <p>The readable version has one agent and an <code>if</code>. The fast version has ten thousand agents and no branches at all — because on a GPU you cannot branch per-instance, so every <code>if</code> becomes arithmetic that computes <b>both</b> outcomes and throws one away.</p>
-  <p>These two are supposed to be the same environment. Nothing checks that they are.</p>
+  <div class="eyebrow">Why bother</div>
+  <h2>The environment is usually the bottleneck.</h2>
+  <p>In most RL training loops the policy update is not what is slow — collecting experience is. A simulator written the readable way steps one instance at a time through the Python interpreter, and no amount of GPU will help, because the GPU is idle waiting for samples.</p>
+  <p>Rewriting the simulator so every instance advances in one tensor operation removes that ceiling. Here is what it is actually worth, measured on the two example environments in this repository:</p>
+</section>
+
+<figure class="fig reveal">
+  <div class="toggle-row">
+    <button class="toggle active" data-env="toywalk">toywalk — a 1-D walk</button>
+    <button class="toggle" data-env="forager">forager — an 8×8 grid</button>
+  </div>
+  <svg id="tp" viewBox="0 0 620 250" style="width:100%;display:block"></svg>
+  <div class="cap" id="tp_cap"></div>
+</figure>
+
+<section class="beat">
+  <p>Two things in that chart are worth pausing on. The first is the scale: <b>ninety-two times</b> the throughput of the readable implementation, and it is still climbing at N = 8192.</p>
+  <p>The second is more useful. At <b>N = 1 the batched version is slower than the readable one</b> — 13,567 steps/s against 385,199. Vectorization is not a free win you sprinkle on; it is a trade that only pays above a few hundred instances. If you are running one environment at a time, the readable implementation <i>is</i> the fast one.</p>
+</section>
+
+<div class="rule"></div>
+
+<!-- 2. THE CATCH -->
+<section class="beat">
+  <div class="eyebrow">The catch</div>
+  <h2>The fast version isn't an optimization. It's a second program.</h2>
+  <p>The readable version has one agent and an <code>if</code>. The fast version has ten thousand agents and no branches at all — because you cannot branch per-instance across a batch, so every <code>if</code> becomes arithmetic that computes <b>both</b> outcomes and discards one.</p>
+  <p>This is where most attempts stall, and the reason is not difficulty — it is trust. Once the two programs exist, nothing checks that they are the same environment, and <span class="coral">a subtly wrong simulator still produces a training curve that goes down</span>. So you end up choosing: keep the version you can reason about and train slowly, or take the speed and stop being able to explain your results.</p>
+  <p>That choice is avoidable. The rest of this page is how.</p>
 </section>
 
 <figure class="fig reveal">
@@ -241,9 +276,21 @@ self.position = torch.<span class="f">clamp</span>(
 
 <div class="rule"></div>
 
-<!-- 2. THE RNG -->
+<!-- 3. THE PROPOSAL -->
 <section class="beat">
-  <div class="eyebrow">The keystone</div>
+  <div class="eyebrow">The proposal</div>
+  <h2>Don't replace the readable one. Keep both, and hold them to the same spec.</h2>
+  <p>Write the environment twice. Once so a person can read it — explicit <code>if</code>s, one instance, every line traceable. Once so a batch of ten thousand can run it. Both are written from a single <code>spec.md</code>, and <b>never from each other</b>.</p>
+  <p>Then have a machine check, step by step, that they produce <b>bit-identical</b> states, rewards, terminations and observations. If they agree, either you implemented the spec correctly twice, or you made the same misreading twice in two very different programming styles — and the second is a far weaker coincidence than getting it right once by luck.</p>
+  <p>What that buys you is specific: the readable implementation stays the thing you reason about, debug against and explain your results with, and the fast one is <span class="sage">provably the same environment</span>. You are not trading interpretability for throughput. You are keeping the first and adding the second.</p>
+  <p class="dim">Three things have to work for that to be true, and the rest of this page is those three, each running live.</p>
+</section>
+
+<div class="rule"></div>
+
+<!-- 4. THE RNG -->
+<section class="beat">
+  <div class="eyebrow">Requirement one</div>
   <h2>Two programs can't agree unless they roll the same dice.</h2>
   <p>Here is the problem that sinks most attempts before they start. The readable version draws randomness one instance at a time. The batched version draws for ten thousand at once and discards most of them. With an ordinary random generator — one that carries a <b>stream position</b> — those discarded draws advance the state, and the two programs desynchronise permanently on the first step.</p>
   <p>Simulacrum removes the stream entirely. Every random decision is a pure function of four numbers:</p>
@@ -287,11 +334,12 @@ self.position = torch.<span class="f">clamp</span>(
 
 <section class="beat">
   <p>Nothing moved. That is the entire trick, and three hard problems fall out of it at once: the batched code can <b>draw for all ten thousand instances and mask</b>, because a discarded draw was never part of a sequence; an episode that ends early can <b>re-key and restart in place</b> without telling anyone; and a port to another array framework is mechanical, because there is no hidden state to port.</p>
+  <p class="dim">That last point is not hypothetical — the environment you are about to play with is running from a 90-line JavaScript port of exactly this generator.</p>
 </section>
 
 <div class="rule"></div>
 
-<!-- 3. FORAGER LIVE -->
+<!-- 5. FORAGER LIVE -->
 <section class="beat">
   <div class="eyebrow">The environment</div>
   <h2>Meet forager. It's small on purpose.</h2>
@@ -320,12 +368,12 @@ self.position = torch.<span class="f">clamp</span>(
 
 <div class="rule"></div>
 
-<!-- 4. THE BREAK-IT LAB -->
+<!-- 6. THE BREAK-IT LAB -->
 <section class="beat">
-  <div class="eyebrow">The test</div>
-  <h2>Now break it on purpose.</h2>
+  <div class="eyebrow">Requirement two</div>
+  <h2>The guarantee, and what it feels like when it fires.</h2>
   <p>Two copies run side by side on the same seed and the same actions: the readable one on the left, the batched one on the right. Switch on a bug and watch them come apart — the agents separate, the berry sets drift, and the runner reports <b>the first step where they disagree and the exact field that did it</b>.</p>
-  <p>These are not invented mistakes. Each one is a real way a scalar environment gets mistranslated into tensors, and <span class="coral">every one of them leaves a perfectly trainable environment behind</span>.</p>
+  <p>These are not invented mistakes. Each one is a real way a readable environment gets mistranslated into tensors, and this is the point worth taking away: <span class="coral">every one of them leaves a perfectly trainable environment behind</span>. Without the check, none of them would ever announce themselves — you would just get a slightly different game and a plausible learning curve.</p>
 </section>
 
 <figure class="fig reveal">
@@ -354,11 +402,11 @@ self.position = torch.<span class="f">clamp</span>(
 
 <div class="rule"></div>
 
-<!-- 5. BATCH INDEPENDENCE -->
+<!-- 7. BATCH INDEPENDENCE -->
 <section class="beat">
-  <div class="eyebrow">The blind spot</div>
-  <h2>And now the bug that test cannot see.</h2>
-  <p>The differential test runs <b>one</b> instance against the reference, because the reference only knows how to be one instance. That is a real hole, and here is what falls through it.</p>
+  <div class="eyebrow">Requirement three</div>
+  <h2>A guarantee that survives scale.</h2>
+  <p>Everything so far compares the batched implementation against the readable one — and the readable one only knows how to be a single instance. So that comparison runs at <b>N = 1</b>, and the whole reason you are vectorizing is to run at N = 8192. There is a real hole there, and here is what falls through it.</p>
   <p>Somewhere in the batched code, a mask of shape <code>[N]</code> meets a quantity of shape <code>[N, 1]</code>. In NumPy and PyTorch that is not an error — it is a <b>broadcast</b>, and it silently produces an <code>[N, N]</code> matrix. A reduction downstream collapses it back to a perfectly plausible <code>[N]</code>. One character of difference:</p>
 </section>
 
@@ -377,8 +425,8 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 </figure>
 
 <section class="beat">
-  <p>Now count the instances the differential test uses. <b>One.</b> And with one instance, that accidental matrix is 1×1 — which is exactly the right answer. The bug is not merely missed; it is <span class="coral">mathematically invisible</span> at the only batch size that test ever runs.</p>
-  <p>So the battery adds a second test with no reference implementation in it at all. Run instance <i>i</i> alone. Run it again inside a batch of eight. Demand the two be bit-identical. Drag the batch size:</p>
+  <p>With one instance, that accidental matrix is 1×1 — which is exactly the right answer. The bug is not merely missed; it is <span class="coral">mathematically invisible</span> at the only batch size a reference comparison can ever run at. And it appears precisely when you scale up, which is to say precisely when you started caring.</p>
+  <p>So the guarantee needs a second leg that does not involve the readable implementation at all. Run instance <i>i</i> alone. Run it again inside a batch of eight. Demand the two be bit-identical. Drag the batch size:</p>
 </section>
 
 <figure class="fig reveal">
@@ -398,11 +446,11 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 
 <div class="rule"></div>
 
-<!-- 6. THE GATE -->
+<!-- 8. THE GATE -->
 <section class="beat">
-  <div class="eyebrow">The point</div>
-  <h2>None of this is worth anything as a suggestion.</h2>
-  <p>Ten tests run as a gate, not a habit. They write a report; training scripts read it and <b>refuse to start</b> if it is missing, failing, or older than the environment's source files. An environment without a fresh passing report is not eligible for training.</p>
+  <div class="eyebrow">Making it stick</div>
+  <h2>A guarantee you have to remember to check isn't one.</h2>
+  <p>Ten tests run as a gate, not a habit. They write a report; training scripts read it and <b>refuse to start</b> if it is missing, failing, or older than the environment's source files. Edit <code>fast.py</code> and go straight back to training and you get stopped, because the report no longer describes the code you are about to run.</p>
   <p class="dim">This is the real output of <code>simulacrum validate examples/forager</code> — the environment you have been playing with above.</p>
 </section>
 
@@ -442,9 +490,25 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 
 <div class="rule"></div>
 
+<section class="beat">
+  <div class="eyebrow win">What it costs</div>
+  <h2>You write the environment twice. That's the bill.</h2>
+  <p>It is a real cost and worth stating plainly: a second implementation, and the discipline to write it from the spec rather than from the first one. In exchange the readable implementation stops being a liability you eventually delete, and becomes the thing that <b>certifies</b> the fast one on every run.</p>
+  <p>Starting from an environment you already have is the easy direction. Your existing readable implementation is the reference — write down its spec, add the batched one, and let the battery tell you where the two disagree. Every divergence it reports is a place your spec was ambiguous, which is worth knowing regardless.</p>
+</section>
+
+<figure class="fig narrow reveal">
+  <div class="wdg-head"><span>Getting started</span><span class="tag idle">three commands</span></div>
+<pre class="code">pip install -e .
+
+simulacrum <span class="f">new</span> myenv        <span class="c"># spec.md, reference.py, fast.py, tests/</span>
+simulacrum <span class="f">validate</span> myenv   <span class="c"># ten tests, one report, a verdict</span></pre>
+  <div class="cap">Then, at the top of your training script: <code>require_fresh_report("myenv", strict=True)</code>. No environment ships with the framework — yours lives in your own repo.</div>
+</figure>
+
 <section class="outro">
-  <h2>Write it twice. Prove they agree.</h2>
-  <p>That is the whole idea, and the whole cost. You write the environment once so a human can read it, once so a GPU can run it, and let a machine hold them to the same spec — instead of finding out six weeks into a training run that your simulator had a favourite corner.</p>
+  <h2>Keep the one you can read.</h2>
+  <p>Vectorizing your simulator should not mean giving up the ability to explain what it does. Write it once for people, once for the hardware, and let a machine hold both to the same spec — so the speed comes with a receipt.</p>
   <div class="links">
     <a href="https://github.com/orbitope/simulacrum">Source</a>
     <a href="https://github.com/orbitope/simulacrum/tree/main/docs/guide">Documentation</a>
@@ -520,6 +584,72 @@ function drawBoard(svg, st, opts){
     });
   }
 }
+
+/* ================= 0. THROUGHPUT CHART ================= */
+/* Real numbers, straight out of validation_report.json for each example.
+   Log scale, because the range spans 13.5k to 35.3M steps/s. */
+(function(){
+  var svg=document.getElementById('tp');
+  if(!svg) return;
+  var DATA={
+    toywalk:{ref:385199, bars:[[1,13567],[64,611780],[1024,6830755],[8192,35288308]],
+      speedup:92,
+      note:'A 1-D walk with two scalar state fields. Its readable implementation is atypically fast — about 2.6&micro;s a step — which makes the batched win here close to a best case.'},
+    forager:{ref:174770, bars:[[1,1909],[64,103403],[1024,853912],[8192,2277929]],
+      speedup:13,
+      note:'An 8&times;8 grid with vector state and per-item random draws. More work per step on both sides, and a lower ratio — the absolute figure, 2.3 million steps/s, is the one that matters.'}
+  };
+  var env='toywalk';
+  function render(){
+    var d=DATA[env];
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    var W=620,LEFT=104,RIGHT=92,TOP=30,BH=26,GAP=13;
+    var all=d.bars.map(function(b){return b[1];}).concat([d.ref]);
+    var max=Math.max.apply(null,all), min=1000;
+    function w(v){ // log scale
+      return Math.max(2,(Math.log(v)-Math.log(min))/(Math.log(max)-Math.log(min))*(W-LEFT-RIGHT));
+    }
+    function txt(x,y,s,fill,anchor,size){
+      var t=el('text',{x:x,y:y,fill:fill||'#6A6358','font-size':size||'11',
+        'font-family':"'JetBrains Mono',monospace"});
+      if(anchor)t.setAttribute('text-anchor',anchor);
+      t.textContent=s; svg.appendChild(t); return t;
+    }
+    txt(LEFT,16,'steps per second — log scale','#6A6358');
+
+    // reference row
+    var y=TOP;
+    svg.appendChild(el('rect',{x:LEFT,y:y,width:w(d.ref),height:BH,fill:'var(--steel)',opacity:'.85',rx:2}));
+    txt(LEFT-10,y+17,'readable','#C8C2B4','end');
+    txt(LEFT+w(d.ref)+8,y+17,d.ref.toLocaleString(),'#9AAABB');
+    y+=BH+GAP+6;
+
+    d.bars.forEach(function(b){
+      var faster=b[1]>d.ref;
+      svg.appendChild(el('rect',{x:LEFT,y:y,width:w(b[1]),height:BH,
+        fill:faster?'var(--amber)':'var(--terra)',opacity:faster?'.9':'.7',rx:2}));
+      txt(LEFT-10,y+17,'batched N='+b[0],'#C8C2B4','end');
+      txt(LEFT+w(b[1])+8,y+17,b[1].toLocaleString(),faster?'#E8C068':'#C47A5A');
+      y+=BH+GAP;
+    });
+
+    // reference marker line
+    var lx=LEFT+w(d.ref);
+    svg.appendChild(el('line',{x1:lx,y1:TOP-4,x2:lx,y2:y-GAP+4,
+      stroke:'var(--steel-bright)','stroke-width':'1','stroke-dasharray':'3 3',opacity:'.55'}));
+
+    document.getElementById('tp_cap').innerHTML =
+      '<b>'+env+'</b> — '+d.note+' Peak is <b>'+d.speedup+'&times;</b> the readable implementation. '+
+      'The dashed line is the readable implementation’s rate: bars to the left of it are <i>slower</i>.';
+  }
+  document.querySelectorAll('.toggle[data-env]').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('.toggle[data-env]').forEach(function(o){o.classList.remove('active');});
+      b.classList.add('active'); env=b.getAttribute('data-env'); render();
+    });
+  });
+  render();
+})();
 
 /* ================= 1. RNG PLAYGROUND ================= */
 (function(){
