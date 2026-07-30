@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "forager state and trajectory schemas",
+  "$defs": {
+    "cell": {
+      "description": "A grid coordinate pair [x, y], each in [0, G-1].",
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0, "maximum": 7 },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "state": {
+      "type": "object",
+      "description": "One serialized forager state. Mirrors spec.md's state-space table.",
+      "properties": {
+        "pos": { "$ref": "#/$defs/cell" },
+        "berries": {
+          "description": "Berry cells, fixed for the episode.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/cell" },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "kinds": {
+          "description": "Berry kind per berry; indexes GAINS.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "alive": {
+          "description": "Berry not yet collected.",
+          "type": "array",
+          "items": { "type": "boolean" },
+          "minItems": 6,
+          "maxItems": 6
+        },
+        "energy": {
+          "description": "Remaining energy, float32. Accumulated left-to-right per spec.md #Energy; both implementations perform the same operations in the same order, so no tolerance is declared.",
+          "type": "number"
+        },
+        "t": { "type": "integer", "minimum": 0, "maximum": 80 }
+      },
+      "required": ["pos", "berries", "kinds", "alive", "energy", "t"],
+      "additionalProperties": false
+    },
+    "action": {
+      "description": "Compass direction: 0 = north, 1 = east, 2 = south, 3 = west.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "trajectory": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "env": { "type": "string" },
+            "format_version": { "type": "string" },
+            "simulacrum_version": { "type": "string" },
+            "seed": { "type": "integer" },
+            "source": { "enum": ["reference", "batched"] },
+            "instance": { "type": ["integer", "null"] },
+            "git_sha": { "type": ["string", "null"] },
+            "created_at": { "type": "string" }
+          },
+          "required": ["env", "format_version", "seed", "source", "created_at"]
+        },
+        "initial": {
+          "type": "object",
+          "properties": {
+            "episode": { "type": "integer" },
+            "state": { "$ref": "#/$defs/state" }
+          },
+          "required": ["episode", "state"]
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "t": { "type": "integer" },
+              "episode": { "type": "integer" },
+              "state": { "$ref": "#/$defs/state" },
+              "action": { "$ref": "#/$defs/action" },
+              "reward": { "type": "number" },
+              "terminated": { "type": "boolean" }
+            },
+            "required": ["t", "episode", "state", "action", "reward", "terminated"]
+          }
+        }
+      },
+      "required": ["metadata", "initial", "steps"]
+    }
+  }
+}
