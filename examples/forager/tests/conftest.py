@@ -55,7 +55,7 @@ def harness_config():
         # Both baselines are measured, not derived: the reference env is
         # deterministic given the fixed seed block, so these means are exactly
         # reproducible and act as a regression gate on the reward function.
-        # The 13.6-point gap between them is the real assertion — a policy that
+        # The 13.6-point gap between them is the real assertion: a policy that
         # seeks berries must beat one that ignores them by roughly that much.
         scripted_policies=[
             ScriptedPolicy(name="greedy_nearest", policy=greedy_nearest,
@@ -64,7 +64,7 @@ def harness_config():
                            expected_return=-4.404, tol=0.05, episodes=50),
         ],
         # Vectorization-win gate. Measured at 13-18x across runs on one
-        # container (compiled, n=8192) — the ratio is noisy because it divides
+        # container (compiled, n=8192). The ratio is noisy because it divides
         # by a reference impl that is itself fast (~170k steps/s), so judge the
         # absolute number too (~2.3-2.9M steps/s). 8x is the robust CI floor.
         min_speedup=8.0,

@@ -1,6 +1,6 @@
 /* simulacrum's counter-based RNG, ported to JavaScript BigInt.
  *
- * This is a transcription of simulacrum/rng.py's scalar backend — same
+ * This is a transcription of simulacrum/rng.py's scalar backend: same
  * splitmix64 constants, same domain tags, same canonical absorb order
  * (domain, slot, index, key, step). BigInt with an explicit 64-bit mask stands
  * in for Python's arbitrary-precision ints masked to 64 bits.
@@ -12,7 +12,7 @@
  *     draw_bits(key, step=7, slot=5)      = 10406080438901372403
  *     draw_uniform(key, step=7, slot=5)   = 0.5641147509457889
  *
- * Those constants are asserted on page load (see index.html) — if this port
+ * Those constants are asserted on page load (see index.html). If this port
  * ever drifts from the framework, the page says so out loud rather than
  * quietly showing numbers that are merely plausible.
  */
@@ -52,7 +52,7 @@
 
   var prefixCache = {};
 
-  /* Sponge state after absorbing (DOMAIN_DRAW, slot, index) — the scalar
+  /* Sponge state after absorbing (DOMAIN_DRAW, slot, index): the scalar
    * leading words of a draw. Cached; slots and indices are small. */
   function drawPrefix(slot, index) {
     var k = slot + ':' + index;
@@ -79,7 +79,7 @@
   }
 
   /* Uniform float64 in [0, 1). Uses the top 53 bits, so Number() is lossless
-   * and the conversion is exact — bit-identical to the Python backend. */
+   * and the conversion is exact, bit-identical to the Python backend. */
   function drawUniform(key, step, slot, index) {
     return Number(drawBits(key, step, slot, index) >> 11n) * INV_2_53;
   }
@@ -95,7 +95,7 @@
     return drawUniform(key, step, slot, index) < p;
   }
 
-  /* Domain tag separating the harness's action stream from env RNG streams —
+  /* Domain tag separating the harness's action stream from env RNG streams.
    * mirrors simulacrum/harness/config.py. Reproducing it here means the page
    * drives its environments with the SAME action sequence the Python battery
    * uses, so the numbers on this page are directly comparable to the numbers

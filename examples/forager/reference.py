@@ -20,23 +20,23 @@ from forager import (
 
 @dataclass
 class State:
-    pos: list          # spec: State space — [x, y], each in [0, G-1]
-    berries: list      # spec: State space — K cells, fixed for the episode
-    kinds: list        # spec: State space — berry kind per berry
-    alive: list        # spec: State space — berry not yet collected
-    energy: np.float32  # spec: State space — float32
-    t: int             # spec: State space — in-episode step counter
+    pos: list          # spec: State space. [x, y], each in [0, G-1]
+    berries: list      # spec: State space. K cells, fixed for the episode
+    kinds: list        # spec: State space. Berry kind per berry
+    alive: list        # spec: State space. Berry not yet collected
+    energy: np.float32  # spec: State space. Float32
+    t: int             # spec: State space. In-episode step counter
 
 
 class ForagerReference(ReferenceEnv):
     def reset(self, seed: int, episode: int = 0) -> State:
         self.seed_episode(seed, episode)
 
-        # spec: Reset — agent cell, slots AGENT_X / AGENT_Y at step 0, index 0.
+        # spec: Reset. Agent cell, slots AGENT_X / AGENT_Y at step 0, index 0.
         pos = [rng.draw_randint(self.key, 0, Slots.AGENT_X, G),
                rng.draw_randint(self.key, 0, Slots.AGENT_Y, G)]
 
-        # spec: Reset — berry k drawn at index = k. Overlaps are legal.
+        # spec: Reset. Berry k drawn at index = k. Overlaps are legal.
         berries = []
         kinds = []
         for k in range(K):
@@ -52,15 +52,15 @@ class ForagerReference(ReferenceEnv):
     def step(self, action: int) -> tuple[State, float, bool, dict]:
         state = self.state
 
-        # spec: Actions — the intended delta for this compass direction.
+        # spec: Actions. The intended delta for this compass direction.
         dx, dy = DELTAS[action]
 
-        # spec: transition step 2 — the GUST draw is keyed on the PRE-move step
+        # spec: transition step 2. The GUST draw is keyed on the PRE-move step
         # counter; if True the delta rotates 90 degrees clockwise.
         if rng.draw_bernoulli(self.key, state.t, Slots.GUST, GUST_P):
             dx, dy = dy, -dx
 
-        # spec: transition step 3 — clamp AFTER the rotation, per coordinate.
+        # spec: transition step 3. Clamp AFTER the rotation, per coordinate.
         x = state.pos[0] + dx
         y = state.pos[1] + dy
         if x < 0:
@@ -75,7 +75,7 @@ class ForagerReference(ReferenceEnv):
         # spec: transition step 4.
         t = state.t + 1
 
-        # spec: Collection — a live berry on the post-move cell is collected;
+        # spec: Collection. A live berry on the post-move cell is collected;
         # gains are summed in ascending k order.
         alive = list(state.alive)
         gained = 0.0
@@ -84,13 +84,13 @@ class ForagerReference(ReferenceEnv):
                 alive[k] = False
                 gained += float(GAINS[state.kinds[k]])
 
-        # spec: Energy — float32, left to right: subtract cost, then add gain.
+        # spec: Energy. Float32, left to right: subtract cost, then add gain.
         energy = np.float32(state.energy - STEP_COST) + np.float32(gained)
 
-        # spec: Rewards — float64, in this order.
+        # spec: Rewards. Float64, in this order.
         reward = REWARD_SCALE * gained + REWARD_STEP
 
-        # spec: Termination — all collected, energy exhausted, or step cap.
+        # spec: Termination. All collected, energy exhausted, or step cap.
         alive_count = sum(1 for a in alive if a)
         terminated = (alive_count == 0) or (float(energy) <= 0.0) or (t == MAX_STEPS)
 
@@ -99,7 +99,7 @@ class ForagerReference(ReferenceEnv):
         return self.state, reward, terminated, {}
 
     def observe(self, state: State) -> np.ndarray:
-        # spec: Observations — float32[5], every division computed in float32.
+        # spec: Observations. Float32[5], every division computed in float32.
         alive_count = sum(1 for a in state.alive if a)
         return np.array(
             [np.float32(state.pos[0]) / np.float32(G - 1),

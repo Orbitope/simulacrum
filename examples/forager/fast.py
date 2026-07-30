@@ -1,11 +1,11 @@
 """Batched tensor implementation of forager.
 
-Written from spec.md ONLY — not from reference.py. State: tensors with leading
+Written from spec.md ONLY, not from reference.py. State: tensors with leading
 [N] dim; branching replaced by torch.where masking; the base class handles
 auto-reset and RNG keying (self.keys, self.t).
 
-Note the unsqueeze discipline throughout. State here is *shaped* — [N, 2]
-positions, [N, K] flags, [N, K, 2] berry cells — so a [N] mask must be lifted
+Note the unsqueeze discipline throughout. State here is *shaped*: [N, 2]
+positions, [N, K] flags, [N, K, 2] berry cells, so a [N] mask must be lifted
 to [N, 1] or [N, 1, 1] before it meets state. A bare [N] mask against [N, 1]
 broadcasts to [N, N]: correct at n=1, cross-contaminated above it, and
 invisible to a differential test that only ever runs one instance. That is
@@ -33,9 +33,9 @@ class ForagerBatched(BatchedEnv):
         self.kinds = torch.zeros(n, K, dtype=torch.int64, device=dev)
         self.alive = torch.ones(n, K, dtype=torch.bool, device=dev)
         self.energy = torch.zeros(n, dtype=torch.float32, device=dev)
-        # spec: Actions — delta lookup, gathered by action index.
+        # spec: Actions. Delta lookup, gathered by action index.
         self._deltas = torch.tensor(DELTAS, dtype=torch.int64, device=dev)
-        # spec: Collection — gains indexed by berry kind, summed in float64.
+        # spec: Collection. Gains indexed by berry kind, summed in float64.
         self._gains = torch.tensor([float(g) for g in GAINS],
                                    dtype=torch.float64, device=dev)
 
@@ -43,13 +43,13 @@ class ForagerBatched(BatchedEnv):
         if not hasattr(self, "pos"):
             self._alloc()
 
-        # spec: Reset — agent cell, slots AGENT_X / AGENT_Y at step 0, index 0.
+        # spec: Reset. Agent cell, slots AGENT_X / AGENT_Y at step 0, index 0.
         # Draw for ALL instances; the stateless RNG makes discarded draws safe.
         ax = rng.draw_randint_torch(self.keys, 0, Slots.AGENT_X, G)
         ay = rng.draw_randint_torch(self.keys, 0, Slots.AGENT_Y, G)
         pos = torch.stack([ax, ay], dim=-1)                       # [N, 2]
 
-        # spec: Reset — berry k drawn at index = k. The index word varies along
+        # spec: Reset. Berry k drawn at index = k. The index word varies along
         # the BERRY axis, never the batch axis; K is a constant, so this loop
         # unrolls at trace time and stays compilable.
         bx = torch.stack(
@@ -74,36 +74,36 @@ class ForagerBatched(BatchedEnv):
         # self.t is zeroed for masked instances by the base class.
 
     def _step_impl(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # spec: Actions — the intended delta for this compass direction.
+        # spec: Actions. The intended delta for this compass direction.
         delta = self._deltas[actions]                             # [N, 2]
 
-        # spec: transition step 2 — GUST keyed on the PRE-move step counter;
+        # spec: transition step 2. GUST keyed on the PRE-move step counter;
         # if True the delta rotates 90 degrees clockwise: (dx, dy) -> (dy, -dx).
         gust = rng.draw_bernoulli_torch(self.keys, self.t, Slots.GUST, GUST_P)
         rotated = torch.stack([delta[:, 1], -delta[:, 0]], dim=-1)
         delta = torch.where(gust.unsqueeze(-1), rotated, delta)
 
-        # spec: transition step 3 — clamp AFTER the rotation.
+        # spec: transition step 3. Clamp AFTER the rotation.
         self.pos = torch.clamp(self.pos + delta, 0, G - 1)
 
-        # spec: Collection — a live berry on the post-move cell is collected.
+        # spec: Collection. A live berry on the post-move cell is collected.
         # berries [N, K, 2] against pos lifted to [N, 1, 2] -> [N, K].
         on_cell = (self.berries == self.pos.unsqueeze(1)).all(-1)  # [N, K]
         collected = on_cell & self.alive                           # [N, K]
         self.alive = self.alive & ~collected
 
-        # spec: Collection — gains summed in ascending k order. Masked-out
+        # spec: Collection. Gains summed in ascending k order. Masked-out
         # berries contribute an exact 0.0, so the reduction matches a scalar
         # accumulation that skips them.
         gained = (self._gains[self.kinds] * collected.to(torch.float64)).sum(-1)
 
-        # spec: Energy — float32, left to right: subtract cost, then add gain.
+        # spec: Energy. Float32, left to right: subtract cost, then add gain.
         self.energy = (self.energy - float(STEP_COST)) + gained.to(torch.float32)
 
-        # spec: Rewards — float64, in this order.
+        # spec: Rewards. Float64, in this order.
         rewards = REWARD_SCALE * gained + REWARD_STEP
 
-        # spec: Termination — all collected, energy exhausted, or step cap.
+        # spec: Termination. All collected, energy exhausted, or step cap.
         alive_count = self.alive.sum(-1)
         terminated = ((alive_count == 0)
                       | (self.energy <= 0.0)
@@ -111,7 +111,7 @@ class ForagerBatched(BatchedEnv):
         return rewards, terminated
 
     def observe(self) -> torch.Tensor:
-        # spec: Observations — float32[5], every division computed in float32.
+        # spec: Observations. Float32[5], every division computed in float32.
         alive_count = self.alive.sum(-1)
         return torch.stack(
             [self.pos[:, 0].to(torch.float32) / float(G - 1),

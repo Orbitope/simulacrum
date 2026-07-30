@@ -29,7 +29,7 @@ x = torch.where(condition, a, b)      # condition: Bool[N]
 `torch.where` **evaluates both branches for every instance.** Two consequences
 you must respect:
 
-**Both branches must be safe to compute everywhere** — no out-of-bounds
+**Both branches must be safe to compute everywhere**: no out-of-bounds
 indexing, no division by zero, no NaN-producing operation on the not-taken
 side. Clamp or sanitize indices *before* gathering, then mask the result:
 
@@ -44,7 +44,7 @@ val = torch.where(has_target, table[safe], default)
 
 **Discarded random draws are harmless.** The RNG is stateless, so drawing for
 all N instances and masking cannot perturb anything. Always draw for the full
-batch — never try to draw "only for the instances that need it".
+batch. Never try to draw "only for the instances that need it".
 
 ---
 
@@ -55,7 +55,7 @@ failure mode comes from.
 
 A `[N]` mask against `[N, D]` state does **not** do what you want. NumPy and
 PyTorch right-align shapes, so `(N,)` becomes `(1, N)` and you either get a
-loud error or — worse — a silent `[N, N]`.
+loud error or, worse, a silent `[N, N]`.
 
 **Lift the mask to the rank of the state it selects:**
 
@@ -110,7 +110,7 @@ combines differently-ranked tensors, and be suspicious of every `keepdim=True`.
 ## Dtype discipline
 
 Match `schema.json` exactly. Dtype drift breaks bit-identity, and the
-differential test reports it as a dtype mismatch — which is a much better
+differential test reports it as a dtype mismatch, which is a much better
 error than a value that is merely close.
 
 ```python
@@ -143,7 +143,7 @@ aliases another tensor will corrupt state in ways that are miserable to
 debug. If you must use it, `clone()` first.
 
 For a reduction over items that must match a scalar accumulation, multiply by
-the mask rather than filtering — masked-out entries contribute an exact `0.0`,
+the mask rather than filtering. Masked-out entries contribute an exact `0.0`,
 so the sums agree:
 
 ```python
@@ -158,7 +158,7 @@ gained = (self._gains[self.kinds] * collected.to(torch.float64)).sum(-1)
 
 1. `_step_impl(actions)` → `(rewards, terminated)`, mutating state for all
    instances; then the base class increments `self.t`.
-2. The post-transition state is snapshotted — this is where terminal states
+2. The post-transition state is snapshotted. This is where terminal states
    are captured.
 3. Terminated instances get a new episode key, `self.t` zeroed, and
    `_reset_instances(terminated)` called.
@@ -205,6 +205,6 @@ Two things to know about the numbers:
   flat.
 - The **speedup ratio** divides by your reference implementation, so a fast
   reference deflates it. toywalk reports 92× and forager 13× on the same
-  machine — not because forager is badly vectorized, but because its
+  machine, not because forager is badly vectorized, but because its
   reference is slower per step. Judge absolute steps/s too; the report records
   both.

@@ -22,7 +22,7 @@ works:
 simulacrum validate examples/toywalk
 ```
 
-The full battery takes a minute or two — most of it is `torch.compile` warmup
+The full battery takes a minute or two. Most of it is `torch.compile` warmup
 in the last two tests. You should end with:
 
 ```
@@ -30,12 +30,12 @@ in the last two tests. You should end with:
   test_differential               PASS      1.83s
   test_batch_independence         PASS      1.69s
   ...
-  overall: PASS — eligible for training
+  overall: PASS (eligible for training)
 ```
 
 `examples/forager` is the bigger example and is worth running too. Both write
 a `validation_report.json` next to the environment package. That file is
-gitignored on purpose — see [validation.md](validation.md#the-report-is-not-a-build-artifact).
+gitignored on purpose; see [validation.md](validation.md#the-report-is-not-a-build-artifact).
 
 ## Scaffold your own
 
@@ -47,7 +47,7 @@ That writes:
 
 ```
 myenv/
-  spec.md           # the single source of truth — TODO-marked
+  spec.md           # the single source of truth, TODO-marked
   schema.json       # state/action schemas; trajectory def prefilled
   __init__.py       # constants and the Slots IntEnum
   reference.py      # ReferenceEnv stub
@@ -75,7 +75,7 @@ framework.
 2. **Fill in `schema.json`** to match the spec's state table exactly.
 3. **Write `reference.py` from the spec.** Readable, single-instance, explicit
    `if`s. Every line should be traceable to a spec line.
-4. **Write `fast.py` from the spec** — not from `reference.py`. Do not have it
+4. **Write `fast.py` from the spec**, not from `reference.py`. Do not have it
    open. If you port `reference.py` line by line you will port its bugs too,
    and the differential test will happily confirm that both copies of the same
    mistake agree with each other.
@@ -93,7 +93,7 @@ simulacrum validate myenv -k differential
 simulacrum validate myenv -k "differential or batch_independence"
 ```
 
-Subset runs deliberately **do not** update `validation_report.json` — a report
+Subset runs deliberately **do not** update `validation_report.json`. A report
 must reflect a full battery run or it is not a gate. The CLI tells you so.
 
 ## Wire the gate into training
@@ -113,6 +113,6 @@ one for a run you intend to trust.
 
 ## Where to go next
 
-- [writing-an-environment.md](writing-an-environment.md) — the full walkthrough
-- [rng-and-slots.md](rng-and-slots.md) — designing your random draws
-- [troubleshooting.md](troubleshooting.md) — when the battery says no
+- [writing-an-environment.md](writing-an-environment.md): the full walkthrough
+- [rng-and-slots.md](rng-and-slots.md): designing your random draws
+- [troubleshooting.md](troubleshooting.md): when the battery says no

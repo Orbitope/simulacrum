@@ -12,11 +12,11 @@ bits = hash(episode_key, step, slot, index)
 episode_key = hash(instance_seed, episode_counter)
 ```
 
-- **`episode_key`** — derived once per episode from `(seed, episode)`.
-- **`step`** — the in-episode step counter `t` at which the draw happens.
+- **`episode_key`**: derived once per episode from `(seed, episode)`.
+- **`step`**: the in-episode step counter `t` at which the draw happens.
   Reset-time draws use step 0.
-- **`slot`** — a small integer naming *which* decision this is.
-- **`index`** — disambiguates repeats of the same decision at the same step.
+- **`slot`**: a small integer naming *which* decision this is.
+- **`index`**: disambiguates repeats of the same decision at the same step.
 
 There is no stream, no cursor, no generator object. Draw the same four
 numbers and you get the same bits, forever, in any order, in any language.
@@ -32,7 +32,7 @@ Because there is no stream state, three things become free:
 
 - **Masking is safe.** A discarded draw was never part of a sequence.
 - **Auto-reset needs no coordination.** A terminated instance increments its
-  episode counter, re-derives its key, and carries on — with nothing to tell
+  episode counter, re-derives its key, and carries on, with nothing to tell
   the reference implementation.
 - **Porting is mechanical.** JAX's RNG is already counter-based; the article's
   JavaScript port is 90 lines of `BigInt`.
@@ -55,7 +55,7 @@ Three rules:
 **One slot per decision.** Two different random decisions at the same step
 must not share a slot, or they will return the same bits and be perfectly
 correlated. If your agent draws a spawn position and a spawn orientation,
-those are two slots — not one slot used twice.
+those are two slots, not one slot used twice.
 
 **Reset draws get their own slots.** Both a reset draw and the first
 transition happen at step 0. If they share a slot they collide. Give
@@ -67,8 +67,8 @@ produced. Append new slots; do not renumber.
 
 ## `index`: several draws of one decision
 
-When one decision repeats at a single step — six berries to place, forty
-cards to shuffle — vary `index`, not `slot`:
+When one decision repeats at a single step (six berries to place, forty
+cards to shuffle), vary `index`, not `slot`:
 
 ```python
 for k in range(K):
@@ -104,7 +104,7 @@ rng.draw_randint(key, step, slot, n, index=0)         -> int in [0, n)
 rng.draw_bernoulli(key, step, slot, p, index=0)       -> bool
 ```
 
-Batched (tensor implementations) — same names with a `_torch` suffix, taking
+Batched (tensor implementations): same names with a `_torch` suffix, taking
 `self.keys` and returning tensors:
 
 ```python
@@ -119,7 +119,7 @@ on.
 
 ## Which step to key on
 
-Per-step draws use the **pre-move** step counter — the value of `t` before
+Per-step draws use the **pre-move** step counter, the value of `t` before
 the transition increments it. Both implementations must agree:
 
 ```python
@@ -131,7 +131,7 @@ gust = rng.draw_bernoulli_torch(self.keys, self.t, Slots.GUST, GUST_P)
 ```
 
 Getting this off by one is the single most common differential failure, and
-it is nasty precisely because the draws remain perfectly uniform — the
+it is nasty precisely because the draws remain perfectly uniform. The
 environment looks entirely healthy and is simply a different environment. Say
 which counter you mean in `spec.md`.
 
@@ -151,7 +151,7 @@ reason to write the environment twice.
 
 The framework ships uniform, randint and bernoulli. For anything else, build
 it from `draw_uniform` **identically in both implementations** and specify the
-construction in `spec.md` — for instance, a categorical draw as a cumulative
+construction in `spec.md`. For instance, a categorical draw as a cumulative
 comparison over a fixed probability vector in a stated order. If you build it
 two different ways, the two ways will disagree in the low bits and you will
 be declaring a float tolerance to paper over what is really a spec gap.

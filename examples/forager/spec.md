@@ -1,7 +1,7 @@
-# forager — environment spec
+# forager: environment spec
 
 Single source of truth. Both `reference.py` and `fast.py` are written from
-this document — never from each other. Every rule below must be traceable in
+this document, never from each other. Every rule below must be traceable in
 both implementations.
 
 Where `toywalk` is deliberately minimal, forager is deliberately *shaped*: it
@@ -25,7 +25,7 @@ arithmetic is performed **in float32** (see #Energy). Rewards are float64.
 | pos       | int64[2]     | `[0, G-1]` each   | agent cell, `(x, y)`                     |
 | berries   | int64[K, 2]  | `[0, G-1]` each   | berry cells, fixed for the episode       |
 | kinds     | int64[K]     | `[0, N_KINDS-1]`  | berry kind; indexes `GAINS`              |
-| alive     | bool[K]      | —                 | berry not yet collected                  |
+| alive     | bool[K]      | n/a               | berry not yet collected                  |
 | energy    | float32      | `<= ENERGY_MAX`   | remaining energy (may go negative)       |
 | t         | int64        | `[0, MAX_STEPS]`  | in-episode step counter (RNG key)        |
 
@@ -38,7 +38,7 @@ array of booleans, `energy` as a number, `t` as an integer.
 
 ## Actions
 
-Integer in `{0, 1, 2, 3}` — a compass direction, giving the intended delta:
+Integer in `{0, 1, 2, 3}`: a compass direction, giving the intended delta:
 
 | action | direction | delta `(dx, dy)` |
 |--------|-----------|------------------|
@@ -62,7 +62,7 @@ Integer in `{0, 1, 2, 3}` — a compass direction, giving the intended delta:
 `alive_count` is the number of `True` entries in `alive` (an exact integer
 sum). Every division is computed **in float32**: cast the integer to float32,
 then divide by the float32 constant. `energy` is already float32 and is passed
-through unchanged. This ordering is normative — it is what makes the two
+through unchanged. This ordering is normative. It is what makes the two
 implementations bit-identical.
 
 ## Rewards
@@ -101,7 +101,7 @@ Drawn at step 0, each with its own slot (see #RNG slots):
 
 **Berries may overlap** each other and may share the agent's starting cell.
 This is deliberate: it removes rejection sampling from the spec, and a step
-that lands on a shared cell collects every live berry there at once — which is
+that lands on a shared cell collects every live berry there at once, which is
 exactly the multi-collection case the reduction in #Energy has to get right.
 
 A berry sharing the agent's *starting* cell is not collected at reset;
@@ -151,7 +151,7 @@ the addition.
 
 Reset-time draws use step 0 with their own slots; per-step draws use the
 current in-episode step `t`. Same slot + same step + same index = same draw,
-in both implementations — that is the whole differential-testing contract.
+in both implementations. That is the whole differential-testing contract.
 
 `BERRY_X`, `BERRY_Y` and `BERRY_KIND` are drawn once **per berry**, using the
 `index` word to separate the `K` draws of one slot at one step. Drawing all

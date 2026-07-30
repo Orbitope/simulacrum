@@ -1,4 +1,4 @@
-"""Rendering hooks for forager — consumed by simulacrum.viz.
+"""Rendering hooks for forager, consumed by simulacrum.viz.
 
 Renderers contain ZERO game logic: they map a schema-conformant state JSON to
 text or a matplotlib figure. They never import reference.py or fast.py.

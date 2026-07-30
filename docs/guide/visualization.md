@@ -23,7 +23,7 @@ writer.write("run.json")
 ```
 
 Metadata records the env name, format version, simulacrum version, seed,
-source (`reference` or `batched`), instance index and git SHA — enough to
+source (`reference` or `batched`), instance index and git SHA: enough to
 reproduce the run later.
 
 Reading validates against your schema:
@@ -36,7 +36,7 @@ traj.total_return                                   # sum of rewards
 ```
 
 The battery already writes trajectories for you when a differential test
-diverges — into `failures/differential/`, one per side, ready to render.
+diverges, into `failures/differential/`, one per side, ready to render.
 
 ---
 
@@ -54,7 +54,7 @@ picker.invariant_failures("myenv/failures")       # snapshots from invariant vio
 picker.random_sample("trajectories/", k=5)        # a control group
 ```
 
-`highest_td_error` takes scores you compute on the training side — the
+`highest_td_error` takes scores you compute on the training side. The
 framework does not compute TD errors itself.
 
 `invariant_failures` reads the snapshots `BatchedEnv` dumps when an invariant
@@ -103,7 +103,7 @@ Video stitching needs `ffmpeg` on PATH; matplotlib is an optional dependency
 
 ## External renderers: the export pack
 
-Heavyweight renderers — Unity, a web viewer — live outside Python and consume
+Heavyweight renderers (Unity, a web viewer) live outside Python and consume
 files only.
 
 ```bash
@@ -124,7 +124,7 @@ pack/
 
 The canonical file carries arbitrarily nested state per your schema. Unity's
 built-in `JsonUtility` cannot deserialize nested dictionaries or polymorphic
-JSON — only flat `[Serializable]` objects with primitive fields and typed
+JSON, only flat `[Serializable]` objects with primitive fields and typed
 lists. So the pack also emits a flat companion in which every **scalar** state
 field becomes a parallel array over steps, alongside `rewards`, `actions`,
 `terminal_step_indices`, and derived series (`reward`, `cumulative_return`)
@@ -133,7 +133,7 @@ shaped for direct feeding into a graph or HUD widget.
 Non-scalar fields cannot be projected that way and are listed by name in
 `skipped_fields`; a renderer that needs them must parse the canonical file
 with a real JSON library. The flat file says so explicitly rather than
-silently emitting zeros — likewise `has_scalar_actions` is `false` when
+silently emitting zeros. Likewise `has_scalar_actions` is `false` when
 actions are structured.
 
 In the flat form, `values[0]` is the initial state and `values[i+1]` is the

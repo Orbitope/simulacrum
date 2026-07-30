@@ -86,7 +86,7 @@ def print_summary(report: dict) -> None:
     missing = report.get("required_tests_not_passed")
     if missing:
         print(f"  required tests not passed: {missing}")
-    verdict = "PASS — eligible for training" if report["overall_pass"] else "FAIL — NOT eligible for training"
+    verdict = "PASS (eligible for training)" if report["overall_pass"] else "FAIL (NOT eligible for training)"
     print(f"  overall: {verdict}\n")
 
 
@@ -131,5 +131,5 @@ def require_fresh_report(env_root: str | Path, *, strict: bool = False) -> bool:
     if _source_mtime(env_root) > created:
         return fail(
             f"env source files modified after the validation report was written "
-            f"({report['created_at']}) — report is STALE")
+            f"({report['created_at']}). Report is STALE")
     return True

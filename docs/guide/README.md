@@ -28,7 +28,7 @@ single-instance version (`reference.py`), and a fast batched tensor version
 other**. A validation battery then runs them side by side and demands
 bit-identical behaviour. If they agree, either you implemented the spec
 correctly twice, or you made the same misreading twice in two very different
-programming styles — which is a much weaker coincidence than getting it right
+programming styles, which is a much weaker coincidence than getting it right
 once by luck. Nothing trains against an environment that has not passed.
 
 ## The two examples
@@ -36,12 +36,12 @@ once by luck. Nothing trains against an environment that has not passed.
 Both live in [`examples/`](../../examples) and both pass the full battery.
 
 **`toywalk`** is deliberately boring: a 1-D walk with two scalar state fields.
-Read it first — it is the smallest complete thing the framework accepts, and
+Read it first. It is the smallest complete thing the framework accepts, and
 you can hold all of it in your head at once.
 
 **`forager`** is deliberately *shaped*: an 8×8 grid with `[K, 2]` berry
 positions, `[K]` flags, per-berry random draws and collection through a masked
-scatter. Read it second — it demonstrates the idioms a real environment needs
+scatter. Read it second. It demonstrates the idioms a real environment needs
 and a scalar toy cannot show you, including the broadcasting mistakes that
 `test_batch_independence` exists to catch.
 

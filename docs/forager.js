@@ -1,4 +1,4 @@
-/* forager, implemented a third time — in JavaScript, from examples/forager/spec.md.
+/* forager, implemented a third time, in JavaScript, from examples/forager/spec.md.
  *
  * Python has two implementations of this environment: a scalar reference and a
  * batched tensor one. This is a third, in a language with no int64 and no
@@ -26,7 +26,7 @@
   var REWARD_SCALE = 10.0, REWARD_STEP = -0.1;
   var ENERGY_MAX = 1.0 + K * GAINS[2];
 
-  // spec: Actions — 0 north, 1 east, 2 south, 3 west.
+  // spec: Actions. 0 north, 1 east, 2 south, 3 west.
   var DELTAS = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 
   // spec: RNG slots.
@@ -34,7 +34,7 @@
 
   function noBugs() { return {}; }
 
-  /* spec: Reset — all draws at step 0, each with its own slot. */
+  /* spec: Reset. All draws at step 0, each with its own slot. */
   function reset(seed, episode, bugs) {
     bugs = bugs || noBugs();
     var key = RNG.episodeKey(seed, episode);
@@ -44,7 +44,7 @@
 
     var berries = [], kinds = [], k;
     for (k = 0; k < K; k++) {
-      // spec: Reset — berry k drawn at index = k.
+      // spec: Reset. Berry k drawn at index = k.
       // BUG berryIndexZero: every berry drawn at index 0, so all K berries
       // land on the same cell. The spec's RNG-slot table warns about exactly
       // this: the index word must vary along the berry axis.
@@ -70,7 +70,7 @@
 
     // 2. GUST is keyed on the PRE-move step counter.
     // BUG gustPostMove: keying on t + 1 instead. Every draw is still perfectly
-    // uniform, so the env looks healthy and trains fine — it is just a
+    // uniform, so the env looks healthy and trains fine. It is just a
     // different environment than the reference one.
     var gustStep = bugs.gustPostMove ? st.t + 1 : st.t;
     var gust = RNG.drawBernoulli(st.key, gustStep, S.GUST, GUST_P, 0);
@@ -85,13 +85,17 @@
     } else {
       if (gust) { var t1 = dx; dx = dy; dy = -t1; }
       // 3. Clamp after the rotation, per coordinate.
-      x = clamp(x + dx); y = clamp(y + dy);
+      // BUG noClamp: forgetting the bounds entirely. The agent walks straight
+      // off the board and keeps going. This one the invariant sweep catches
+      // before the differential test even matters.
+      if (bugs.noClamp) { x = x + dx; y = y + dy; }
+      else { x = clamp(x + dx); y = clamp(y + dy); }
     }
 
     // 4.
     var t = st.t + 1;
 
-    // 5. spec: Collection — live berry on the post-move cell; gains summed in
+    // 5. spec: Collection. Live berry on the post-move cell; gains summed in
     // ascending k order.
     var alive = st.alive.slice(), gained = 0.0;
     for (var k = 0; k < K; k++) {
@@ -101,7 +105,7 @@
       }
     }
 
-    // 6. spec: Energy — float32, left to right.
+    // 6. spec: Energy. Float32, left to right.
     // BUG energyFloat64: skipping the float32 rounding. This is dtype drift:
     // the values stay plausible and only diverge in the low bits, which is
     // precisely what a bit-identity check is for.
@@ -112,11 +116,18 @@
       energy = Math.fround(Math.fround(st.energy - STEP_COST) + Math.fround(gained));
     }
 
-    // spec: Rewards — float64, in this order.
-    var reward = REWARD_SCALE * gained + REWARD_STEP;
+    // spec: Rewards. Float64, in this order.
+    // BUG rewardBeforeCollect: computing the reward from the pre-collection
+    // gain, which is always zero. Every step scores the same -0.1 whatever the
+    // agent does, so there is no signal to learn from at all.
+    var reward = bugs.rewardBeforeCollect
+      ? REWARD_SCALE * 0.0 + REWARD_STEP
+      : REWARD_SCALE * gained + REWARD_STEP;
 
     // 7. spec: Termination.
-    var aliveCount = countAlive(alive);
+    // BUG terminateBeforeCollect: counting berries from the pre-collection
+    // state, so the episode runs one extra step past the final pickup.
+    var aliveCount = countAlive(bugs.terminateBeforeCollect ? st.alive : alive);
     var terminated = (aliveCount === 0) || (energy <= 0.0) || (t === MAX_STEPS);
 
     return {
@@ -136,8 +147,14 @@
     return n;
   }
 
-  /* spec: Observations — float32[5], every division computed in float32. */
-  function observe(st) {
+  /* spec: Observations. Float32[5], every division computed in float32.
+   * BUG obsFloat64: dividing in float64. The observation the agent sees is
+   * off in the low bits on nearly every step. */
+  function observe(st, bugs) {
+    if (bugs && bugs.obsFloat64) {
+      return [st.pos[0] / (G - 1), st.pos[1] / (G - 1), st.energy,
+              countAlive(st.alive) / K, st.t / MAX_STEPS];
+    }
     return [
       Math.fround(st.pos[0] / (G - 1)),
       Math.fround(st.pos[1] / (G - 1)),
@@ -192,7 +209,7 @@
       div = compare(t, 'state', toJSON(r.state), toJSON(f.state));
       if (div) return { divergence: div, trace: trace, steps: t };
 
-      var ro = observe(r.state), fo = observe(f.state);
+      var ro = observe(r.state, null), fo = observe(f.state, bugs);
       for (var i = 0; i < ro.length; i++) {
         if (ro[i] !== fo[i]) {
           return { divergence: { step: t, kind: 'obs', diffs: [], detail:
@@ -249,7 +266,7 @@
    *     alive_count = self.alive.sum(-1, keepdim=True)   # [N, 1]  <-- keepdim
    *     terminated  = (alive_count == 0) | (self.energy <= 0.0) | ...
    *
-   * [N, 1] | [N] does not error — it broadcasts to [N, N], and a later
+   * [N, 1] | [N] does not error. It broadcasts to [N, N], and a later
    * reduction collapses it back to a plausible-looking [N]. The result is that
    * instance i terminates as soon as ANY instance in the batch runs out of
    * energy. At n = 1 the outer product is 1x1, so the bug is a perfect no-op
@@ -297,10 +314,20 @@
     return out;
   }
 
-  /* One instance run alone — batched with n = 1. This is the comparison
+  /* One instance run alone, batched with n = 1. This is the comparison
    * test_batch_independence makes against the in-batch run. */
   function rolloutSolo(seed, nSteps, bugs) {
     return rolloutBatch([seed], nSteps, bugs)[0];
+  }
+
+  /* Search for a seed whose action stream actually reaches the state a bug
+   * corrupts. Some bugs are only reachable from states random play rarely
+   * visits, which is exactly why the battery sweeps K seeds rather than one. */
+  function findCatchingSeed(bugs, nSteps, limit) {
+    for (var s = 0; s < (limit || 400); s++) {
+      if (runDifferential(s, nSteps || 300, bugs).divergence) return s;
+    }
+    return null;
   }
 
   global.SimForager = {
@@ -310,6 +337,7 @@
     reset: reset, step: step, observe: observe, toJSON: toJSON,
     countAlive: countAlive,
     runDifferential: runDifferential,
+    findCatchingSeed: findCatchingSeed,
     rolloutBatch: rolloutBatch,
     rolloutSolo: rolloutSolo
   };
