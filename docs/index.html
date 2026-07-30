@@ -165,6 +165,15 @@
   .bug .e b{color:var(--terra);font-weight:500}
   .bug.on .e{border-left-color:var(--coral)}
   .bug.on .e b{color:var(--coral)}
+  .bug .body{min-width:0}
+  /* the offending line, revealed only when that bug is switched on */
+  .bug .code{display:none;margin-top:9px;border:1px solid var(--border);border-radius:4px;overflow-x:auto}
+  .bug.on .code{display:block}
+  .bug .code span{display:block;white-space:pre;font-size:11px;line-height:1.7;padding:6px 10px}
+  .bug .code .bad{background:rgba(255,94,58,.09);color:#E9A18C;border-bottom:1px solid var(--border)}
+  .bug .code .good{background:rgba(125,154,106,.08);color:#A8C295}
+  .bug .code .bad::before{content:"- ";opacity:.6}
+  .bug .code .good::before{content:"+ ";opacity:.6}
   .bug code{background:var(--raised);border-radius:2px;padding:0 4px;color:var(--steel-bright)}
 
   /* heatmap */
@@ -208,41 +217,74 @@
 <header class="hero">
   <div class="kicker">Simulacrum · vectorizing RL environments</div>
   <h1>Make your environment <span class="accent">100× faster</span>. Keep the one you can read.</h1>
-  <p class="sub">A readable Python environment steps about <b>385,000</b> times a second. The same environment written as batched tensors steps <b>35 million</b> times a second. It is also a different program, which is why most people never trust it enough to throw the readable one away. This is how you keep both and <b>prove they are the same environment</b>. Everything on this page is running live in your browser.</p>
+  <p class="sub">Teaching an agent anything means running your simulator a few million times. Written the normal way, one step at a time in Python, that's the slowest thing you own. Rewrite it so ten thousand copies step at once and it goes about a hundred times faster. It also stops being code you can read, and it might quietly not be the same game. Here's how to take the speed and keep the version you understand. Everything on this page is running for real in your browser.</p>
   <div class="scroll-cue">scroll</div>
 </header>
 
-<!-- 1. THE MOTIVATION: SPEED -->
+<!-- 1. FIRST, AN ENVIRONMENT -->
+<section class="beat">
+  <div class="eyebrow">First, the thing itself</div>
+  <h2>This is forager. It's the whole game.</h2>
+  <p>An 8×8 grid. Six berries worth <span class="sage">0.10</span>, <span style="color:var(--terra)">0.15</span> and <span style="color:var(--mauve)">0.30</span> energy. You start with 1.0 and burn 0.02 a step, so you've got fifty steps unless you eat. Pick a direction, move one square, eat what you land on.</p>
+  <p>One wrinkle: <b>15% of the time a gust spins your move 90° clockwise</b>. You meant to go north, you went east. That's the only randomness in here, and it's the thing that makes everything later hard.</p>
+  <p><span class="dim">Press Step a few times. It's playing itself with random moves.</span></p>
+</section>
+
+<figure class="fig narrow reveal">
+  <div class="wdg-head"><span>forager · seed <b id="f_seed">42</b></span><span class="tag idle" id="f_tag">t = 0</span></div>
+  <svg class="board" id="f_board" viewBox="0 0 240 240" role="img" aria-label="forager grid"></svg>
+  <div class="ebar"><i id="f_ebar" style="width:100%"></i></div>
+  <div class="stats">
+    <span>energy <b id="f_energy">1.000</b></span>
+    <span>berries left <b id="f_left">6</b>/6</span>
+    <span>return <b class="big" id="f_ret">0.00</b></span>
+  </div>
+  <div class="wdg-foot">
+    <span id="f_note">Random actions, same stream the validation battery uses.</span>
+    <span style="display:flex;gap:8px">
+      <button class="btn" id="f_step">Step</button>
+      <button class="btn" id="f_play">Play</button>
+      <button class="btn" id="f_new">New seed</button>
+    </span>
+  </div>
+</figure>
+
+<section class="beat">
+  <p>That's it. That's the environment. Now hold onto something: to teach an agent to play even this, you need <b>millions</b> of steps. Not thousands. And you don't want one copy of that board, you want ten thousand of them running side by side, because that's the only way you keep a GPU busy.</p>
+  <p>So the question stops being "does my simulator work" and becomes <b>"how fast can I run ten thousand of them"</b>.</p>
+</section>
+
+<div class="rule"></div>
+
+<!-- 2. WHY BOTHER: SPEED -->
 <section class="beat">
   <div class="eyebrow">Why bother</div>
-  <h2>The environment is usually the bottleneck.</h2>
-  <p>In most RL training loops the policy update is not what is slow. Collecting experience is. A simulator written the readable way steps one instance at a time through the Python interpreter, and no amount of GPU will help, because the GPU is idle waiting for samples.</p>
-  <p>Rewriting the simulator so every instance advances in one tensor operation removes that ceiling. Here is what it is actually worth, measured on the two example environments in this repository:</p>
+  <h2>Your simulator is the bottleneck. Not your GPU.</h2>
+  <p>Here's the shape of it. Your agent learns by playing: try something, see what happened, nudge the weights, repeat, a few million times over. The learning half runs on a GPU and is genuinely quick. The playing half runs in your simulator, one step at a time, in Python. Guess which one you spend the afternoon waiting on.</p>
+  <p>Rewriting the simulator so every copy advances in a single tensor operation is what removes the ceiling. Here's what that's actually worth, measured on the two example environments in the repo:</p>
 </section>
 
 <figure class="fig reveal">
   <div class="toggle-row">
     <button class="toggle active" data-env="toywalk">toywalk &middot; a 1-D walk</button>
-    <button class="toggle" data-env="forager">forager &middot; an 8×8 grid</button>
+    <button class="toggle" data-env="forager">forager &middot; the grid above</button>
   </div>
   <svg id="tp" viewBox="0 0 620 250" style="width:100%;display:block"></svg>
   <div class="cap" id="tp_cap"></div>
 </figure>
 
 <section class="beat">
-  <p>Two things in that chart are worth pausing on. The first is the scale: <b>ninety-two times</b> the throughput of the readable implementation, and it is still climbing at N = 8192.</p>
-  <p>The second is more useful. At <b>N = 1 the batched version is slower than the readable one</b>: 13,567 steps/s against 385,199. Vectorization is not a free win you sprinkle on; it is a trade that only pays above a few hundred instances. If you are running one environment at a time, the readable implementation <i>is</i> the fast one.</p>
+  <p>Two things there are worth stopping on. The first is the size of it: <b>ninety-two times</b> the readable implementation, and still climbing at N = 8192.</p>
+  <p>The second is more useful to you. Look at <b>N = 1</b>. The batched version is <i>slower</i> than the plain Python one, 13,567 steps/s against 385,199. Vectorizing isn't free speed you sprinkle on top. It's a trade that doesn't pay until you're running a few hundred copies at once. If you only ever run one environment at a time, you already have the fast one.</p>
 </section>
 
 <div class="rule"></div>
 
-<!-- 2. THE CATCH -->
+<!-- 3. THE CATCH -->
 <section class="beat">
   <div class="eyebrow">The catch</div>
-  <h2>The fast version isn't an optimization. It's a second program.</h2>
-  <p>The readable version has one agent and an <code>if</code>. The fast version has ten thousand agents and no branches at all, because you cannot branch per-instance across a batch. Every <code>if</code> becomes arithmetic that computes <b>both</b> outcomes and discards one.</p>
-  <p>This is where most attempts stall, and the reason is not difficulty. It is trust. Once the two programs exist, nothing checks that they are the same environment, and <span class="coral">a subtly wrong simulator still produces a training curve that goes down</span>. So you end up choosing: keep the version you can reason about and train slowly, or take the speed and stop being able to explain your results.</p>
-  <p>That choice is avoidable. The rest of this page is how.</p>
+  <h2>The fast one is a different program.</h2>
+  <p>The readable version has one agent and an <code>if</code>. The fast version has ten thousand agents and no branches at all, because you can't branch per-instance across a batch. Every <code>if</code> turns into arithmetic that works out <b>both</b> answers and throws one away.</p>
 </section>
 
 <figure class="fig reveal">
@@ -276,25 +318,30 @@ self.position = torch.<span class="f">clamp</span>(
     -L, L)</pre>
     </div>
   </div>
-  <div class="cap">The same four lines of a spec, twice. <b>torch.where evaluates both branches for every instance</b>, which is safe only if both are always computable, and only if the random draw the discarded branch consumed didn't disturb anything. Hold that thought.</div>
+  <div class="cap">Same four lines of spec, written twice. <b>torch.where runs both branches for every instance</b>, which is only safe if both are always computable, and only if the random draw the losing branch consumed didn't disturb anything. Hang onto that.</div>
 </figure>
+
+<section class="beat">
+  <p>Now, the obvious move is to write the fast one, check it looks right, and delete the slow one. Everybody does this. It feels safe, because you tested it. You tested it against the fast one.</p>
+  <p>And here's the part that should worry you: <span class="coral">a subtly wrong simulator still gives you a training curve that goes down</span>. Your agent gets better at <i>something</i>. You just don't find out it was the wrong something until much later, if ever.</p>
+</section>
 
 <div class="rule"></div>
 
-<!-- 3. THE PROPOSAL -->
+<!-- 4. THE PROPOSAL -->
 <section class="beat">
   <div class="eyebrow">The proposal</div>
-  <h2>Don't replace the readable one. Keep both, and hold them to the same spec.</h2>
-  <p>Write the environment twice. Once so a person can read it: explicit <code>if</code>s, one instance, every line traceable. Once so a batch of ten thousand can run it. Both are written from a single <code>spec.md</code>, and <b>never from each other</b>.</p>
-  <p>Then have a machine check, step by step, that they produce <b>bit-identical</b> states, rewards, terminations and observations. If they agree, either you implemented the spec correctly twice, or you made the same misreading twice in two very different programming styles. The second is a far weaker coincidence than getting it right once by luck.</p>
-  <p>What that buys you is specific: the readable implementation stays the thing you reason about, debug against and explain your results with, and the fast one is <span class="sage">provably the same environment</span>. You are not trading interpretability for throughput. You are keeping the first and adding the second.</p>
-  <p class="dim">Three things have to work for that to be true, and the rest of this page is those three, each running live.</p>
+  <h2>Don't delete the slow one. Make it earn its keep.</h2>
+  <p>Write the environment twice. Once so a person can read it: explicit <code>if</code>s, one instance, every line traceable back to a rule. Once so ten thousand copies can run it. Both get written from a single <code>spec.md</code>, and <b>never from each other</b>.</p>
+  <p>Then let a machine check, step by step, that the two produce <b>bit-identical</b> states, rewards, terminations and observations. If they agree, either you got the spec right twice, or you made the same misreading twice in two completely different programming styles. The second one is a much weaker coincidence than getting it right once by luck.</p>
+  <p>What you get out of that is specific. The readable version stays the thing you debug against, reason about and explain your results with. The fast one is <span class="sage">provably the same environment</span>. You're not trading interpretability for throughput, you're keeping the first and adding the second.</p>
+  <p class="dim">Three things have to work for that to hold up. The rest of this page is those three, each one running live.</p>
 </section>
 
 <section class="beat">
-  <div class="eyebrow">What you're actually installing</div>
+  <div class="eyebrow">What you're installing</div>
   <h2>Simulacrum is the part you'd otherwise write yourself.</h2>
-  <p>None of the above is a technique you hand-roll per project. It's a Python package: <code>pip install</code>, then <code>simulacrum new myenv</code> lays down the skeleton. You fill in four files. Everything that makes the comparison possible is already there.</p>
+  <p>None of this is a technique you hand-roll per project. It's a Python package. <code>pip install</code>, then <code>simulacrum new myenv</code> drops the skeleton, and you fill in four files.</p>
 </section>
 
 <figure class="fig narrow reveal">
@@ -308,24 +355,23 @@ self.position = torch.<span class="f">clamp</span>(
   tests/
     conftest.py    <span class="n">you</span>   ~20 lines naming your two factories
     test_battery.py      <span class="c">from simulacrum.harness.battery import *</span></pre>
-  <div class="cap">That last line is the whole test suite. The ten tests, the field-level diffs, the trajectory dumps on failure: all of it arrives with the star-import.</div>
+  <div class="cap">That last line is the entire test suite. Ten tests, field-level diffs, trajectory dumps when something fails: all of it shows up with the star-import.</div>
 </figure>
 
 <section class="beat">
-  <p>What the package supplies underneath is the awkward machinery you would otherwise get subtly wrong: the <b>counter-based RNG</b> in both a scalar and a tensor flavour, guaranteed bit-identical; a <code>BatchedEnv</code> base class that owns the step loop, in-tensor auto-reset, terminal-state capture and invariant checking; trajectory read/write against your schema; and the report gate. Your <code>fast.py</code> for forager is about sixty lines, because the base class does everything that isn't the game itself.</p>
-  <p class="dim">Two commands and one import. The rest of this page is what they buy you.</p>
+  <p>Underneath, the package hands you the awkward machinery you'd otherwise get subtly wrong: a <b>counter-based RNG</b> in both a scalar and a tensor flavour, guaranteed to agree bit-for-bit; a <code>BatchedEnv</code> base class that owns the step loop, in-tensor auto-reset, terminal-state capture and invariant checking; trajectory read/write against your schema; and the report gate. forager's <code>fast.py</code> is about sixty lines, because the base class handles everything that isn't the game.</p>
 </section>
 
 <div class="rule"></div>
 
-<!-- 4. THE RNG -->
+<!-- 5. REQUIREMENT ONE: THE RNG -->
 <section class="beat">
   <div class="eyebrow">Requirement one</div>
   <h2>Two programs can't agree unless they roll the same dice.</h2>
-  <p>Here is the problem that sinks most attempts before they start. The readable version draws randomness one instance at a time. The batched version draws for ten thousand at once and discards most of them. With an ordinary random generator, one that carries a <b>stream position</b>, those discarded draws advance the state, and the two programs desynchronise permanently on the first step.</p>
-  <p>Simulacrum removes the stream entirely. Every random decision is a pure function of four numbers:</p>
+  <p>This is the problem that kills most attempts before they start. The readable version draws its randomness one instance at a time. The batched version draws for ten thousand at once and bins most of them. With a normal random generator, the kind that keeps a <b>position in a stream</b>, those binned draws still advance the stream, and your two programs come apart permanently on step one.</p>
+  <p>So simulacrum throws the stream away. Every random decision is a pure function of four numbers:</p>
   <p style="text-align:center"><code>bits = hash(episode_key, step, slot, index)</code></p>
-  <p>No history, no cursor, nothing to keep in sync. A <span class="amber">slot</span> names <i>which</i> decision this is; <span class="amber">index</span> separates repeats of the same decision, one per berry, say. Move the sliders: the draw depends on those four numbers and <b>nothing else</b>.</p>
+  <p>No history, no cursor, nothing to keep in sync. A <span class="amber">slot</span> names <i>which</i> decision this is. <span class="amber">index</span> separates repeats of the same decision, one per berry, say. Drag the sliders. The draw depends on those four numbers and <b>nothing else</b>.</p>
 </section>
 
 <figure class="fig narrow reveal">
@@ -363,47 +409,19 @@ self.position = torch.<span class="f">clamp</span>(
 </figure>
 
 <section class="beat">
-  <p>Nothing moved. That is the entire trick, and three hard problems fall out of it at once: the batched code can <b>draw for all ten thousand instances and mask</b>, because a discarded draw was never part of a sequence; an episode that ends early can <b>re-key and restart in place</b> without telling anyone; and a port to another array framework is mechanical, because there is no hidden state to port.</p>
-  <p class="dim">That last point is not hypothetical. The environment you are about to play with is running from a 90-line JavaScript port of exactly this generator.</p>
+  <p>Now hit "draw them out of order". Nothing moves.</p>
+  <p>That's the whole trick, and three hard problems fall out of it at once. The batched code can <b>draw for all ten thousand instances and throw most away</b>, because a binned draw was never part of a sequence. An episode that ends early can <b>re-key and restart in place</b> without telling anybody. And porting to another array library is mechanical, because there's no hidden state to port.</p>
+  <p class="dim">That last one isn't hypothetical. The grid you played with up top is running on a 90-line JavaScript port of this exact generator.</p>
 </section>
 
 <div class="rule"></div>
 
-<!-- 5. FORAGER LIVE -->
-<section class="beat">
-  <div class="eyebrow">The environment</div>
-  <h2>Meet forager. It's small on purpose.</h2>
-  <p>An 8×8 grid. Six berries, three kinds worth <span class="sage">0.10</span>, <span class="terra" style="color:var(--terra)">0.15</span> and <span style="color:var(--mauve)">0.30</span> energy. You start with 1.0 energy and lose 0.02 a step, so you have fifty steps unless you eat. Each step you pick a compass direction, and <b>15% of the time a gust rotates your move 90° clockwise</b>. That gust is the stochasticity that makes agreeing on randomness hard.</p>
-  <p class="dim">The JavaScript below is a <b>third implementation</b> of this environment, written in a language with no int64 and no tensors, from the same spec.md the two Python versions were written from. It is checked against them step by step.</p>
-</section>
-
-<figure class="fig narrow reveal">
-  <div class="wdg-head"><span>forager · seed <b id="f_seed">42</b></span><span class="tag idle" id="f_tag">t = 0</span></div>
-  <svg class="board" id="f_board" viewBox="0 0 240 240" role="img" aria-label="forager grid"></svg>
-  <div class="ebar"><i id="f_ebar" style="width:100%"></i></div>
-  <div class="stats">
-    <span>energy <b id="f_energy">1.000</b></span>
-    <span>berries left <b id="f_left">6</b>/6</span>
-    <span>return <b class="big" id="f_ret">0.00</b></span>
-  </div>
-  <div class="wdg-foot">
-    <span id="f_note">Random actions, same stream the validation battery uses.</span>
-    <span style="display:flex;gap:8px">
-      <button class="btn" id="f_step">Step</button>
-      <button class="btn" id="f_play">Play</button>
-      <button class="btn" id="f_new">New seed</button>
-    </span>
-  </div>
-</figure>
-
-<div class="rule"></div>
-
-<!-- 6. THE BREAK-IT LAB -->
+<!-- 6. REQUIREMENT TWO: THE DIFFERENTIAL TEST -->
 <section class="beat">
   <div class="eyebrow">Requirement two</div>
-  <h2>The guarantee, and what it feels like when it fires.</h2>
-  <p>Two copies run side by side on the same seed and the same actions: the readable one on the left, the batched one on the right. <b>One bug is switched on already</b>, so you land on a real divergence. Untick it to watch 300 steps come back identical, then try the others.</p>
-  <p>These are not invented mistakes. Every one is a real way a readable environment gets mistranslated into tensors, and each carries a cost line: <span class="coral">what your agent actually learns instead</span>. That is the part worth reading. Most of these leave a perfectly trainable environment behind, so without the check none of them would ever announce themselves. You would just get a slightly different game and a plausible learning curve.</p>
+  <h2>Break it on purpose and watch the test catch it.</h2>
+  <p>Two copies, same seed, same actions. Readable on the left, batched on the right. <b>One bug is already switched on</b>, so you land on a real divergence. Untick it and watch 300 steps come back identical, then go break something else.</p>
+  <p>Each one shows you the <b>actual line of code</b> that causes it, and what it costs you at training time. These aren't invented. They're the mistakes people make translating a readable environment into tensors, and most of them leave a perfectly trainable environment behind.</p>
 </section>
 
 <figure class="fig reveal">
@@ -432,16 +450,38 @@ self.position = torch.<span class="f">clamp</span>(
 
 <div class="rule"></div>
 
-<!-- 7. BATCH INDEPENDENCE -->
+<!-- 7. THE DEPLOYMENT GAP -->
+<section class="beat">
+  <div class="eyebrow">Why you should care</div>
+  <h2>What a broken environment actually costs you.</h2>
+  <p>"The states diverge at step six" is easy to shrug at. So here's the same thing in money terms: take a berry-seeking policy, score it in the <b>broken</b> environment the way your training dashboard would, then run that same policy in the <b>real</b> one and see what you actually get.</p>
+  <p>These are live numbers, computed in your browser over 50 episodes as you click. And they don't all fail the same way:</p>
+</section>
+
+<figure class="fig reveal">
+  <div class="toggle-row" id="dep_tabs"></div>
+  <svg id="dep" viewBox="0 0 620 190" style="width:100%;display:block"></svg>
+  <div class="cap" id="dep_cap"></div>
+</figure>
+
+<section class="beat">
+  <p>Three different disasters, and only one of them looks like a disaster while it's happening.</p>
+  <p>The berry bug is the loud one: your dashboard reads <span class="sage">+11.5</span> and you ship, and the thing scores <span class="coral">−3.3</span> in the real world, because it learned a map that doesn't exist. The reward bug is the quiet one that costs you a month: your dashboard reads <span class="coral">−2.3</span> for a policy that's actually worth <span class="sage">+9.2</span>, so you conclude your algorithm is broken and go tune hyperparameters that were never the problem. And the float bugs change no behaviour at all, they just mean nobody, including you, can ever reproduce your run.</p>
+  <p class="dim">Honest about what this is: a hand-written policy scored in both environments, not a trained agent. A real training run would additionally <i>adapt</i> to the broken dynamics, which generally widens these gaps rather than closing them.</p>
+</section>
+
+<div class="rule"></div>
+
+<!-- 8. REQUIREMENT THREE: BATCH INDEPENDENCE -->
 <section class="beat">
   <div class="eyebrow">Requirement three</div>
-  <h2>A guarantee that survives scale.</h2>
-  <p>Everything so far compares the batched implementation against the readable one, and the readable one only knows how to be a single instance. So that comparison runs at <b>N = 1</b>, and the whole reason you are vectorizing is to run at N = 8192. There is a real hole there, and here is what falls through it.</p>
-  <p>Somewhere in the batched code, a mask of shape <code>[N]</code> meets a quantity of shape <code>[N, 1]</code>. In NumPy and PyTorch that is not an error. It is a <b>broadcast</b>, and it silently produces an <code>[N, N]</code> matrix. A reduction downstream collapses it back to a perfectly plausible <code>[N]</code>. One character of difference:</p>
+  <h2>And now the bug that only exists in a crowd.</h2>
+  <p>Everything so far compares the batched version against the readable one, and the readable one only knows how to be a single instance. So that comparison runs at <b>N = 1</b>, and the entire reason you're here is to run at N = 8192. There's a hole in that, and here's what falls through it.</p>
+  <p>Somewhere in your batched code, a mask shaped <code>[N]</code> meets something shaped <code>[N, 1]</code>. In NumPy and PyTorch that isn't an error. It's a <b>broadcast</b>, and it quietly hands you an <code>[N, N]</code> matrix that a reduction downstream flattens back into a perfectly reasonable-looking <code>[N]</code>. One keyword:</p>
 </section>
 
 <figure class="fig narrow reveal">
-  <div class="wdg-head"><span>The one-character bug</span><span class="tag no">silent</span></div>
+  <div class="wdg-head"><span>The one-word bug</span><span class="tag no">silent</span></div>
 <pre class="code"><span class="c"># correct</span>
 alive_count = self.alive.<span class="f">sum</span>(-1)
 terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
@@ -451,12 +491,12 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 alive_count = self.alive.<span class="f">sum</span>(-1, <span class="n">keepdim=True</span>)
 terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 <span class="c">#              [N, 1]              [N]            -&gt; [N, N]  ✗</span></pre>
-  <div class="cap">Instance <b>i</b> now terminates as soon as <b>any</b> instance in the batch runs out of energy. Episodes end early, all over the batch, for reasons that have nothing to do with the agent.</div>
+  <div class="cap">Instance <b>i</b> now dies the moment <b>any</b> instance in the batch runs out of energy. Episodes end early, all over the batch, for reasons that have nothing to do with the agent.</div>
 </figure>
 
 <section class="beat">
-  <p>With one instance, that accidental matrix is 1×1, which is exactly the right answer. The bug is not merely missed; it is <span class="coral">mathematically invisible</span> at the only batch size a reference comparison can ever run at. And it appears precisely when you scale up, which is to say precisely when you started caring.</p>
-  <p>So the guarantee needs a second leg that does not involve the readable implementation at all. Run instance <i>i</i> alone. Run it again inside a batch of eight. Demand the two be bit-identical. Drag the batch size:</p>
+  <p>At one instance, that accidental matrix is 1×1, which is exactly the right answer. So the bug isn't just missed, it's <span class="coral">mathematically invisible</span> at the only batch size a reference comparison can ever run at. And it shows up the moment you scale, which is to say the moment you started caring.</p>
+  <p>Which is why the guarantee needs a second leg with no reference implementation in it at all. Run instance <i>i</i> alone. Run it again inside a batch of eight. Demand the two be bit-identical. <b>Drag N up and watch the rows go red.</b></p>
 </section>
 
 <figure class="fig reveal">
@@ -479,9 +519,9 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 <!-- 8. THE GATE -->
 <section class="beat">
   <div class="eyebrow">Making it stick</div>
-  <h2>A guarantee you have to remember to check isn't one.</h2>
-  <p>Ten tests run as a gate, not a habit. They write a report; training scripts read it and <b>refuse to start</b> if it is missing, failing, or older than the environment's source files. Edit <code>fast.py</code> and go straight back to training and you get stopped, because the report no longer describes the code you are about to run.</p>
-  <p class="dim">This is the real output of <code>simulacrum validate examples/forager</code>, the environment you have been playing with above.</p>
+  <h2>Nobody remembers to run the tests.</h2>
+  <p>So it isn't left up to you. The ten tests write a report, and your training script reads it and <b>refuses to start</b> if it's missing, failing, or older than your source files. Tweak <code>fast.py</code>, go straight back to training, and you get stopped, because the report no longer describes the code you're about to run.</p>
+  <p class="dim">Here's the real thing, from <code>simulacrum validate examples/forager</code>. Same environment you were poking at up top.</p>
 </section>
 
 <figure class="fig reveal">
@@ -521,8 +561,8 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 <section class="beat">
   <div class="eyebrow win">What it costs</div>
   <h2>You write the environment twice. That's the bill.</h2>
-  <p>It is a real cost and worth stating plainly: a second implementation, and the discipline to write it from the spec rather than from the first one. In exchange the readable implementation stops being a liability you eventually delete, and becomes the thing that <b>certifies</b> the fast one on every run.</p>
-  <p>Starting from an environment you already have is the easy direction. Your existing readable implementation is the reference. Write down its spec, add the batched one, and let the battery tell you where the two disagree. Every divergence it reports is a place your spec was ambiguous, which is worth knowing regardless.</p>
+  <p>Worth saying plainly, because it's a real cost: a second implementation, plus the discipline to write it from the spec instead of from the first one. What you get back is that the readable version stops being a liability you'll eventually delete, and becomes the thing that <b>certifies</b> the fast one on every single run.</p>
+  <p>And if you already have an environment, you're most of the way there. The thing you've got is the reference. Write down its spec, add a batched one, and let the battery tell you where they disagree. Every divergence it finds is a place your spec was ambiguous, which you wanted to know anyway.</p>
 </section>
 
 <figure class="fig narrow reveal">
@@ -531,12 +571,12 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 
 simulacrum <span class="f">new</span> myenv        <span class="c"># spec.md, reference.py, fast.py, tests/</span>
 simulacrum <span class="f">validate</span> myenv   <span class="c"># ten tests, one report, a verdict</span></pre>
-  <div class="cap">Then, at the top of your training script: <code>require_fresh_report("myenv", strict=True)</code>. No environment ships with the framework; yours lives in your own repo.</div>
+  <div class="cap">Then one line at the top of your training script: <code>require_fresh_report("myenv", strict=True)</code>. No environment ships with the framework. Yours lives in your own repo.</div>
 </figure>
 
 <section class="outro">
   <h2>Keep the one you can read.</h2>
-  <p>Vectorizing your simulator should not mean giving up the ability to explain what it does. Write it once for people, once for the hardware, and let a machine hold both to the same spec, so the speed comes with a receipt.</p>
+  <p>Going fast shouldn't cost you the ability to explain what your simulator does. Write it once for people, once for the hardware, and let a machine hold both to the same spec. Then the speed comes with a receipt.</p>
   <div class="links">
     <a href="https://github.com/orbitope/simulacrum">Source</a>
     <a href="https://github.com/orbitope/simulacrum/tree/main/docs/guide">Documentation</a>
@@ -546,7 +586,6 @@ simulacrum <span class="f">validate</span> myenv   <span class="c"># ten tests, 
 </section>
 
 </div>
-
 <script src="rng.js"></script>
 <script src="forager.js"></script>
 <script>
@@ -789,42 +828,62 @@ function drawBoard(svg, st, opts){
 (function(){
   var host=document.getElementById('d_bugs');
   if(!host) return;
+  // Each `c` is the real line from fast.py, wrong then right.
   var BUGS=[
     {id:'gustPostMove', t:'Gust keyed on the wrong step',
      d:'The spec keys the gust draw on the <code>t</code> before the move. This keys it on <code>t + 1</code>.',
-     e:'Every draw is still perfectly uniform, so the environment looks healthy and trains fine. It is simply a different world than the one you designed.'},
+     e:'Every draw is still perfectly uniform, so the environment looks healthy and trains fine. It is simply a different world than the one you designed.',
+     c:['gust = rng.draw_bernoulli_torch(self.keys, self.t + 1, Slots.GUST, GUST_P)',
+        'gust = rng.draw_bernoulli_torch(self.keys, self.t,     Slots.GUST, GUST_P)']},
     {id:'rewardBeforeCollect', t:'Reward computed before collection',
      d:'One line too early, so the gain from this step is always zero.',
-     e:'Every step scores <b>-0.1</b> no matter what the agent does. There is no signal at all, and you get a flat learning curve you will blame on your hyperparameters.'},
+     e:'Every step scores <b>-0.1</b> no matter what the agent does. No signal at all, and a flat learning curve you will blame on your hyperparameters.',
+     c:['rewards = REWARD_SCALE * gained + REWARD_STEP   # gained is still 0 here\ngained  = (self._gains[self.kinds] * collected).sum(-1)',
+        'gained  = (self._gains[self.kinds] * collected).sum(-1)\nrewards = REWARD_SCALE * gained + REWARD_STEP']},
     {id:'terminateBeforeCollect', t:'Termination checked before collection',
      d:'The berry count comes from the pre-collection state. It only matters on the step that clears the <i>last</i> berry.',
-     e:'Episodes run a step past the final pickup, so returns are quietly off. Note what happens when you tick this at seed 42: nothing. Random play never clears all six berries here, so the bug is real and simply never reached.'},
+     e:'Episodes run a step past the final pickup, so returns are quietly off. Watch what happens when you tick this at seed 42.',
+     c:['alive_count = self.alive.sum(-1)          # before the scatter\nself.alive  = self.alive & ~collected',
+        'self.alive  = self.alive & ~collected\nalive_count = self.alive.sum(-1)']},
     {id:'berryIndexZero', t:'Every berry drawn at index 0',
      d:'The <code>index</code> word separates six draws of one slot. Drop it.',
-     e:'All six berries stack on one cell. The map is a fifth as rich as you think, and the agent learns a degenerate strategy that will not transfer.'},
+     e:'All six berries stack on one cell. The map is a fifth as rich as you think, and the agent learns a strategy for a world that does not exist.',
+     c:['bx = torch.stack([rng.draw_randint_torch(self.keys, 0, Slots.BERRY_X, G, index=0)\n                  for k in range(K)], dim=-1)',
+        'bx = torch.stack([rng.draw_randint_torch(self.keys, 0, Slots.BERRY_X, G, index=k)\n                  for k in range(K)], dim=-1)']},
     {id:'noClamp', t:'Forgot to clamp to the board',
      d:'The position update never bounds itself.',
-     e:'The agent walks off the grid and keeps going. This is the friendly case: an invariant catches it immediately instead of you finding it in week six.'},
+     e:'The agent walks off the grid and keeps going. The friendly case: an invariant catches it immediately instead of you finding it in week six.',
+     c:['self.pos = self.pos + delta',
+        'self.pos = torch.clamp(self.pos + delta, 0, G - 1)']},
     {id:'clampBeforeRotate', t:'Clamp applied before the rotation',
      d:'Spec step 3 clamps <i>after</i> the gust rotates the move.',
-     e:'A gusted step at the edge escapes the bound. Rare, position-dependent, and exactly the kind of thing that never reproduces when you go looking.'},
+     e:'A gusted step at the edge escapes the bound. Rare, position-dependent, and exactly the kind of thing that never reproduces when you go looking.',
+     c:['self.pos = torch.clamp(self.pos + delta, 0, G - 1)\ndelta    = torch.where(gust.unsqueeze(-1), rotated, delta)',
+        'delta    = torch.where(gust.unsqueeze(-1), rotated, delta)\nself.pos = torch.clamp(self.pos + delta, 0, G - 1)']},
     {id:'energyFloat64', t:'Energy accumulated in float64',
      d:'The spec makes energy arithmetic float32; this skips the narrowing.',
-     e:'Values stay plausible and differ only in the low bits. Nothing will ever look wrong, and your batched runs will not reproduce your reference runs.'},
+     e:'Values stay plausible and differ only in the low bits. Nothing ever looks wrong, and your batched runs will not reproduce your reference runs.',
+     c:['self.energy = (self.energy - STEP_COST) + gained',
+        'self.energy = (self.energy - STEP_COST) + gained.to(torch.float32)']},
     {id:'obsFloat64', t:'Observation normalised in float64',
      d:'Same narrowing missed one layer out, in what the agent actually sees.',
-     e:'The network is fed slightly different numbers than the readable env would produce. This is the one that makes a published result impossible for anyone else to reproduce.'}
+     e:'The network is fed slightly different numbers than the readable env would produce. This is the one that makes a published result impossible to reproduce.',
+     c:['self.pos[:, 0] / (G - 1)',
+        'self.pos[:, 0].to(torch.float32) / float(G - 1)']}
   ];
   // Start on a divergence rather than a clean pass: the interesting state is
   // the one where the test has something to say.
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
   var active={gustPostMove:true}, seed=42, res=null, cursor=0;
 
   BUGS.forEach(function(b){
     var d=document.createElement('div'); d.className='bug'; d.tabIndex=0;
     if(active[b.id]) d.classList.add('on');
-    d.innerHTML='<span class="box"></span><span><span class="t">'+b.t+'</span>'+
+    d.innerHTML='<span class="box"></span><span class="body"><span class="t">'+b.t+'</span>'+
       '<span class="d">'+b.d+'</span>'+
-      '<span class="e"><b>What it costs you:</b> '+b.e+'</span></span>';
+      '<span class="e"><b>What it costs you:</b> '+b.e+'</span>'+
+      '<span class="code"><span class="bad">'+esc(b.c[0])+'</span>'+
+      '<span class="good">'+esc(b.c[1])+'</span></span></span>';
     function toggle(){
       if(active[b.id]) delete active[b.id]; else active[b.id]=true;
       d.classList.toggle('on', !!active[b.id]);
@@ -892,6 +951,117 @@ function drawBoard(svg, st, opts){
   document.getElementById('d_jump').addEventListener('click',function(){
     if(res.divergence){cursor=res.divergence.step; paint();}});
   run();
+})();
+
+/* ================= 3b. THE DEPLOYMENT GAP =================
+   A berry-seeking policy, scored two ways: inside the broken environment (what
+   a training dashboard would report) and inside the correct one (what you
+   actually get). Both numbers are computed here, over 50 episodes, on click. */
+(function(){
+  var svg=document.getElementById('dep'), tabs=document.getElementById('dep_tabs');
+  if(!svg||!tabs) return;
+  var EPISODES=50, CAP=200;
+
+  function greedy(st){
+    var px=st.pos[0], py=st.pos[1], best=null;
+    for(var k=0;k<F.K;k++){
+      if(!st.alive[k]) continue;
+      var c=st.berries[k], d=Math.abs(c[0]-px)+Math.abs(c[1]-py);
+      if(best===null||d<best[0]) best=[d,c];
+    }
+    if(best===null) return 0;
+    var c=best[1];
+    if(c[0]>px) return 1;
+    if(c[0]<px) return 3;
+    if(c[1]>py) return 0;
+    return 2;
+  }
+  /* policyBugs = the world the policy believes in; worldBugs = the world it
+     is actually stepping through. Equal -> training. Differing -> deployment. */
+  function score(policyBugs, worldBugs){
+    var total=0;
+    for(var e=0;e<EPISODES;e++){
+      var st=F.reset(1000+e,0,worldBugs), ret=0;
+      for(var t=0;t<CAP;t++){
+        var believed=F.reset(1000+e,0,policyBugs);
+        believed.pos=st.pos; believed.alive=st.alive;
+        var r=F.step(st, greedy(believed), worldBugs);
+        ret+=r.reward; st=r.state;
+        if(r.terminated) break;
+      }
+      total+=ret;
+    }
+    return total/EPISODES;
+  }
+
+  var CASES=[
+    {id:'berryIndexZero', label:'Wrong world',
+     note:'All six berries drawn at index 0, so they stack on one cell. The policy learns where the food is in a world that does not exist, then goes looking for it in the real one.'},
+    {id:'rewardBeforeCollect', label:'Wrong metric',
+     note:'The reward is computed a line too early, so eating never pays. The policy itself is fine. Your dashboard is what is broken, and it will have you tuning an algorithm that was never the problem.'},
+    {id:'energyFloat64', label:'Silent',
+     note:'Energy accumulated in float64 instead of float32. No behavioural difference at all at this scale. What you lose is reproducibility: nobody, including you, gets these numbers back.'}
+  ];
+  var pick=0, cache={};
+
+  CASES.forEach(function(c,i){
+    var b=document.createElement('button');
+    b.className='toggle'+(i===0?' active':''); b.textContent=c.label;
+    b.addEventListener('click',function(){
+      tabs.querySelectorAll('.toggle').forEach(function(o){o.classList.remove('active');});
+      b.classList.add('active'); pick=i; render();
+    });
+    tabs.appendChild(b);
+  });
+
+  function render(){
+    var c=CASES[pick];
+    if(!cache[c.id]){
+      var bugs={}; bugs[c.id]=true;
+      cache[c.id]={inSim:score(bugs,bugs), real:score(bugs,{}), baseline:score({},{})};
+    }
+    var d=cache[c.id];
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+
+    var W=620, LEFT=176, RIGHT=104, TOP=26, BH=34, GAP=20;
+    var vals=[d.inSim, d.real, d.baseline];
+    var lo=Math.min.apply(null,vals.concat([0])), hi=Math.max.apply(null,vals.concat([0]));
+    var span=(hi-lo)||1, zero=LEFT+(0-lo)/span*(W-LEFT-RIGHT);
+    function x(v){ return LEFT+(v-lo)/span*(W-LEFT-RIGHT); }
+    function txt(px,py,s,fill,anchor,size){
+      var e=el('text',{x:px,y:py,fill:fill||'#6A6358','font-size':size||'11',
+        'font-family':"'JetBrains Mono',monospace"});
+      if(anchor)e.setAttribute('text-anchor',anchor);
+      e.textContent=s; svg.appendChild(e); return e;
+    }
+    var rows=[
+      ['what your dashboard says', d.inSim,   'var(--steel)'],
+      ['what you actually get',    d.real,    d.real<d.inSim?'var(--coral)':'var(--sage)'],
+      ['a correct environment',    d.baseline,'var(--amber)']
+    ];
+    var y=TOP;
+    rows.forEach(function(r){
+      var xv=x(r[1]);
+      svg.appendChild(el('rect',{x:Math.min(zero,xv), y:y, width:Math.max(Math.abs(xv-zero),2),
+        height:BH, fill:r[2], opacity:'.9', rx:2}));
+      txt(LEFT-14,y+22,r[0],'#C8C2B4','end');
+      // Value in a fixed right-hand column so a negative bar's label can never
+      // collide with the row label on the left.
+      txt(W-8, y+22, (r[1]>=0?'+':'')+r[1].toFixed(2),
+          r[2]==='var(--coral)'?'#FF5E3A':'#EDE8DC', 'end', '12');
+      y+=BH+GAP;
+    });
+    svg.appendChild(el('line',{x1:zero,y1:TOP-8,x2:zero,y2:y-GAP+8,
+      stroke:'#6A6358','stroke-width':'1','stroke-dasharray':'3 3',opacity:'.7'}));
+    txt(zero,y-GAP+22,'0 return','#6A6358','middle','10');
+
+    var delta=d.real-d.inSim;
+    document.getElementById('dep_cap').innerHTML =
+      c.note+' &nbsp;Gap between the dashboard and reality: <b style="color:'+
+      (Math.abs(delta)<0.01?'var(--text-muted)':'var(--coral)')+'">'+
+      (delta>=0?'+':'')+delta.toFixed(2)+' return</b> over '+EPISODES+' episodes.';
+  }
+  render();
 })();
 
 /* ================= 4. BATCH INDEPENDENCE HEATMAP ================= */
