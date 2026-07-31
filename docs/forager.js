@@ -320,6 +320,41 @@
     return rolloutBatch([seed], nSteps, bugs)[0];
   }
 
+  /* A viewing companion to runDifferential. The differential runner stops at
+   * the first divergence, which is right for a test and useless for a widget:
+   * it ends the recording at the exact moment the two sides become worth
+   * watching. This keeps both running for the whole horizon so the boards can
+   * be scrubbed either side of the divergence. Once they disagree they are two
+   * different episodes, so each side auto-resets on its own schedule.
+   * Frame t holds the state after step t, matching runDifferential's numbering.
+   * Nothing here feeds the report; runDifferential remains the source of truth
+   * for whether, and where, the two implementations diverge. */
+  function runDrift(seed, nSteps, bugs) {
+    var ref = reset(seed, 0, noBugs());
+    var fast = reset(seed, 0, bugs);
+    var refEp = 0, fastEp = 0;
+    // Frame 0 is the reset state, before any action, so a bug that only shows
+    // up on the first step still has an identical "before" to step back to.
+    // Frame k > 0 holds the state after step k-1.
+    var trace = [{ step: null, ref: ref, fast: fast,
+                   refReward: null, fastReward: null,
+                   refTerm: false, fastTerm: false,
+                   refObs: observe(ref, null), fastObs: observe(fast, bugs) }];
+    for (var t = 0; t < nSteps; t++) {
+      var action = RNG.sampleAction(seed, t, 4);
+      var r = step(ref, action, noBugs());
+      var f = step(fast, action, bugs);
+      ref = r.state; fast = f.state;
+      trace.push({ step: t, action: action, ref: ref, fast: fast,
+                   refReward: r.reward, fastReward: f.reward,
+                   refTerm: r.terminated, fastTerm: f.terminated,
+                   refObs: observe(ref, null), fastObs: observe(fast, bugs) });
+      if (r.terminated) { refEp++; ref = reset(seed, refEp, noBugs()); }
+      if (f.terminated) { fastEp++; fast = reset(seed, fastEp, bugs); }
+    }
+    return trace;
+  }
+
   /* Search for a seed whose action stream actually reaches the state a bug
    * corrupts. Some bugs are only reachable from states random play rarely
    * visits, which is exactly why the battery sweeps K seeds rather than one. */
@@ -337,6 +372,7 @@
     reset: reset, step: step, observe: observe, toJSON: toJSON,
     countAlive: countAlive,
     runDifferential: runDifferential,
+    runDrift: runDrift,
     findCatchingSeed: findCatchingSeed,
     rolloutBatch: rolloutBatch,
     rolloutSolo: rolloutSolo
