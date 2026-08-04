@@ -142,6 +142,45 @@ https://orbitope.github.io/simulacrum/
 
 ---
 
+## LinkedIn — Wed 19 Aug
+
+Short post + link, matching the format that already worked for you — not a long-form narrative.
+Body stays link-free; post the link yourself as the first comment once it's up.
+
+**Post**
+
+```text
+Vectorizing my RL environment made it up to 92x faster. It also quietly turned it into a different
+program.
+
+Every `if` in a single-instance simulator becomes arithmetic in a batched one — compute both
+branches, mask off the one that didn't happen. That's an easy place to introduce a bug a training
+curve won't visibly flag; it'll just train a bit worse and you'll blame the hyperparameters.
+
+The fix: write the environment twice. A slow, readable single-instance reference and a fast batched
+version, both derived from one spec, never from each other — sharing a counter-based RNG so they
+roll identical dice. A differential test battery then steps both side by side and demands they agree
+at zero tolerance.
+
+Detail I liked: on the simplest example, batching made it 28x SLOWER at batch size 1 before it became
+92x faster at batch size 8192. All the overhead, none of the payoff, until the batch is big enough to
+amortize it.
+
+Code and the ten-test battery in the comments.
+```
+
+**Hashtags:** `#ReinforcementLearning #MachineLearning #SoftwareTesting`
+**Image:** `img/reference-vs-batched.mp4` or `img/throughput-92x.png`
+
+**First comment**
+
+```text
+Write-up: https://orbitope.github.io/simulacrum/
+Code: https://github.com/orbitope/simulacrum
+```
+
+---
+
 ## Asset index — `docs/promo/img/`
 
 All captured from `docs/index.html` itself by `scripts/capture_promo.mjs`; nothing is redrawn.
@@ -163,19 +202,24 @@ Warm-up **Wed 5 – Thu 6 Aug**: ordinary commenting, no links, in r/WebGames an
 low-level commenting going in each week's target subs throughout — with a new account this matters
 more than any single post.
 
-| Week | Reddit #1 | Reddit #2 | X |
-|---|---|---|---|
-| 1 | Thu 6 Aug — **Gridlocked** → r/WebGames | Sat 8 Aug — r/puzzles | — (already posted) |
-| 2 | Tue 11 Aug — **Hex Truchet** → r/proceduralgeneration | Thu 13 Aug — r/tabletopgamedesign | Wed 12 Aug |
-| 3 | Tue 18 Aug — **Simulacrum** → r/reinforcementlearning | Thu 20 Aug — r/MachineLearning `[P]` (gated) | Wed 19 Aug |
-| 4 | Tue 25 Aug — **Pushman** → r/Unity3D | Thu 27 Aug — r/gamedev | Wed 26 Aug |
-| 5 | Tue 1 Sep — **RLevator** → r/reinforcementlearning | Thu 3 Sep — r/MachineLearning `[P]` (gated) | Wed 2 Sep |
+| Week | Reddit #1 | Reddit #2 | X | LinkedIn |
+|---|---|---|---|---|
+| 1 | Thu 6 Aug — **Gridlocked** → r/WebGames | Sat 8 Aug — r/puzzles | — (already posted) | Wed 5 Aug |
+| 2 | Tue 11 Aug — **Hex Truchet** → r/proceduralgeneration | Thu 13 Aug — r/tabletopgamedesign | Wed 12 Aug | Wed 12 Aug |
+| 3 | Tue 18 Aug — **Simulacrum** → r/reinforcementlearning | Thu 20 Aug — r/MachineLearning `[P]` (gated) | Wed 19 Aug | Wed 19 Aug |
+| 4 | Tue 25 Aug — **Pushman** → r/Unity3D | Thu 27 Aug — r/gamedev | Wed 26 Aug | Wed 26 Aug |
+| 5 | Tue 1 Sep — **RLevator** → r/reinforcementlearning | Thu 3 Sep — r/MachineLearning `[P]` (gated) | Wed 2 Sep | Wed 2 Sep |
 
 Reddit posts land Tuesday mornings US-Eastern; the second sub is staggered two days so two threads
 are never live at once. X threads go Wednesday, a day behind Reddit, so a good comment can be folded
 in. **r/MachineLearning is gated on account standing** — skip it if the account is still thin; both
 RL projects stand fine on r/reinforcementlearning alone. r/algorithms is deliberately unused: best
 topical fit for Gridlocked, but hostile to self-promotion from a new account. Revisit after week 5.
+
+LinkedIn rides the same Wednesday slot as X — one extra post to draft per week, no new day added.
+Body stays link-free on every LinkedIn post; the link goes in your own first comment once it's up,
+same convention as Reddit. Week 1's LinkedIn post (Wed 5 Aug) is the exception that runs a day ahead
+of the Reddit warm-up, since LinkedIn has no comment-karma ramp to respect.
 
 Note the two r/reinforcementlearning posts (this one and RLevator) are two full weeks apart and on
 genuinely different topics. Don't compress that gap.
