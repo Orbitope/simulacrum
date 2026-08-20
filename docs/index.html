@@ -40,7 +40,82 @@
     --mauve:#9A7AB0; --sage:#7D9A6A; --terra:#C47A5A; --coral:#FF5E3A;
     --text-bright:#EDE8DC; --text-primary:#C8C2B4; --text-muted:#6A6358;
     --font-display:'Rajdhani',sans-serif; --font-mono:'JetBrains Mono',monospace;
+  
+    --fig-bg:#0d0c07; --slate:#3f4a56; --border-strong:#3d3a30;
   }
+
+  /* ── Accessibility mode ────────────────────────────────────────────────
+     Engaged by the control in the corner, or automatically under
+     `prefers-contrast: more`. Three things change, in the order they
+     actually matter to a reader:
+
+       1. the data-series tokens move to a scale separated by LIGHTNESS as
+          well as hue. The house scale separates by hue alone, so sage and
+          terra land 20.4 apart under simulated deuteranopia — the same
+          colour, for the ~5% of men who have it.
+       2. hairlines get a 2px floor and decorative opacity is dropped.
+          Presentation attributes lose to any CSS declaration, so this
+          reaches the stroke widths figure JS sets inline, without a redraw.
+       3. where a figure encodes category by colour alone, it gains a
+          second channel — shape, or a letter.
+
+     (3) is what does the real work. Colour alone cannot be made
+     colour-blind-safe at five-plus categories: any set of hues at one
+     lightness collapses for somebody. The palette only buys margin, which
+     is why these hues can stay in the house families rather than going
+     electric to chase a separation number.                              */
+  html[data-a11y]{
+    --amber:#D9B45F; --amber-bright:#F2CF79;
+    --steel:#79BCF3; --steel-bright:#A8D2F7;
+    --mauve:#B563C6; --sage:#668442; --terra:#DB8F6D; --coral:#D45F77;
+    --slate:#4F9D99;
+    --text-muted:#A39B8C;      /* house var(--text-muted) is 3.21:1 — under the floor */
+    --text-primary:#DED8CA;
+    --border:#6E6959;          /* house var(--border) is 1.29:1 */
+    --border-strong:#837D6B;
+    --stroke-floor:2px;
+    --mark-opacity:1;
+  }
+  /* A blanket stroke-width would also thin the strokes that are deliberately
+     heavy. CSS cannot take a max against a presentation attribute, so raise
+     the thin values by name. */
+  html[data-a11y] .fig svg [stroke-width="1"],
+  html[data-a11y] .fig svg [stroke-width="1.5"],
+  html[data-a11y] .fig svg [stroke-width="0.5"],
+  html[data-a11y] .fig svg [stroke-width=".5"],
+  html[data-a11y] figure svg [stroke-width="1"],
+  html[data-a11y] figure svg [stroke-width="1.5"]{stroke-width:var(--stroke-floor)}
+  /* Decorative transparency halves effective contrast: a .72-opacity mark at
+     4.47:1 lands at 2.84:1, under the 3:1 floor for a graphic. */
+  html[data-a11y] figure svg [opacity]{opacity:var(--mark-opacity)}
+
+  .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+    clip-path:inset(50%);white-space:nowrap;border:0}
+  .kbd-hint{font-size:10px;color:var(--text-muted);letter-spacing:.04em}
+
+  /* The control that turns on legibility must not itself be the least legible
+     thing on the page. 10.7:1 resting, 44px target, first tab stop. */
+  .a11y-btn{position:fixed;top:14px;right:14px;z-index:60;display:inline-flex;align-items:center;
+    justify-content:center;gap:7px;min-height:44px;
+    font-family:var(--font-display,sans-serif);font-weight:600;font-size:11px;letter-spacing:.12em;
+    text-transform:uppercase;background:rgba(26,24,18,.92);backdrop-filter:blur(6px);
+    color:var(--text-primary);border:1px solid var(--border-strong,#3d3a30);border-radius:4px;
+    padding:7px 13px;cursor:pointer;transition:.2s}
+  .a11y-btn:hover{color:var(--text-bright);border-color:var(--amber)}
+  .a11y-btn:focus-visible{outline:3px solid var(--amber-bright);outline-offset:3px}
+  .a11y-btn svg{flex:none}
+  /* State is not carried by colour. Amber-vs-bone is invisible to exactly the
+     readers this control exists for, so on/off is spelled out in the label and
+     the icon flips fill as well. */
+  .a11y-btn .state{font-weight:700}
+  .a11y-btn .state::after{content:"OFF"}
+  .a11y-btn[aria-pressed="true"]{color:var(--amber-bright);border-color:var(--amber);
+    background:rgba(196,154,60,.16);box-shadow:inset 0 0 0 1px var(--amber)}
+  .a11y-btn[aria-pressed="true"] .state::after{content:"ON"}
+  .a11y-btn[aria-pressed="true"] .half{transform:rotate(180deg);transform-origin:12px 12px}
+  @media(max-width:560px){.a11y-btn .txt{position:absolute;width:1px;height:1px;overflow:hidden;
+    clip-path:inset(50%)}.a11y-btn{min-width:44px;padding:8px 10px}}
+
   html{scroll-behavior:smooth}
   @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   body{background:var(--void);color:var(--text-primary);font-family:var(--font-mono);
@@ -74,7 +149,7 @@
   .beat .coral{color:var(--coral)} .beat .steel{color:var(--steel-bright)} .beat .dim{color:var(--text-muted)}
   .rule{width:1px;height:60px;margin:0 auto;background:linear-gradient(transparent,var(--border),transparent)}
 
-  .fig{max-width:940px;margin:34px auto;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:#0d0c07}
+  .fig{max-width:940px;margin:34px auto;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--fig-bg)}
   .fig figcaption,.fig .cap{font-size:11px;color:var(--text-muted);padding:11px 16px;border-top:1px solid var(--border);letter-spacing:.03em;line-height:1.6}
   .fig .cap b{color:var(--text-primary);font-weight:500}
   .fig.narrow{max-width:680px}
@@ -86,7 +161,7 @@
     border-bottom:1px solid var(--border);font-size:12px;color:var(--text-muted);letter-spacing:.04em;flex-wrap:wrap}
   .wdg-head b{color:var(--text-bright);font-weight:500}
   .tag{font-weight:500;letter-spacing:.12em;padding:3px 10px;border-radius:3px;font-size:11px;white-space:nowrap}
-  .tag.ok{color:#0d0c07;background:var(--sage)} .tag.no{color:#0d0c07;background:var(--coral)}
+  .tag.ok{color:var(--fig-bg);background:var(--sage)} .tag.no{color:var(--fig-bg);background:var(--coral)}
   .tag.idle{color:var(--text-muted);border:1px solid var(--border)}
   .wdg-foot{padding:12px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);
     display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -95,7 +170,7 @@
   .btn:hover{color:var(--text-bright);border-color:var(--amber)}
   .btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
   .btn:disabled{opacity:.35;cursor:default}
-  .btn.on{color:#0d0c07;background:var(--amber);border-color:var(--amber)}
+  .btn.on{color:var(--fig-bg);background:var(--amber);border-color:var(--amber)}
 
   .toggle-row{display:flex;border-bottom:1px solid var(--border)}
   .toggle{flex:1;padding:12px 6px;font-family:var(--font-display);font-weight:600;font-size:12px;
@@ -126,7 +201,7 @@
   .cellr{fill:var(--raised);stroke:#000;stroke-opacity:.35;stroke-width:.5}
   .berry0{fill:var(--sage)} .berry1{fill:var(--terra)} .berry2{fill:var(--mauve)}
   .berry.gone{opacity:.13}
-  .agent{fill:var(--amber-bright);stroke:#0d0c07;stroke-width:1.5}
+  .agent{fill:var(--amber-bright);stroke:var(--fig-bg);stroke-width:1.5}
   .agent.alt{fill:var(--coral)}
   .stats{display:flex;justify-content:center;gap:16px;flex-wrap:wrap;padding:2px 12px 12px;font-size:11px;color:var(--text-muted)}
   .stats b{color:var(--amber-bright);font-weight:500;font-variant-numeric:tabular-nums}
@@ -182,7 +257,7 @@
   .bug .box{flex:none;width:15px;height:15px;border:1px solid var(--border);border-radius:3px;margin-top:2px;position:relative;transition:.18s}
   .bug.on .box{background:var(--coral);border-color:var(--coral)}
   .bug.on .box::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;
-    border:solid #0d0c07;border-width:0 2px 2px 0;transform:rotate(45deg)}
+    border:solid var(--fig-bg);border-width:0 2px 2px 0;transform:rotate(45deg)}
   .bug .t{display:block;font-size:12.5px;color:var(--text-primary);line-height:1.45}
   .bug.on .t{color:var(--text-bright)}
   .bug .d{display:block;font-size:11px;color:var(--text-muted);line-height:1.55;margin-top:4px}
@@ -241,6 +316,17 @@
 </style>
 </head>
 <body>
+<!-- orbitope:a11y-control — self-contained; move as one block. -->
+<button id="a11yBtn" class="a11y-btn" type="button" aria-pressed="false"
+        title="High-contrast, colour-blind-safe figures">
+  <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <circle cx="12" cy="12" r="9"/>
+    <path class="half" d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" stroke="none"/>
+  </svg>
+  <span class="txt">Contrast</span><span class="state"></span>
+</button>
+
 <div class="progress" id="progress"></div>
 <div class="wrap">
 
@@ -299,8 +385,8 @@
     <button class="toggle active" data-env="toywalk">toywalk &middot; a 1-D walk</button>
     <button class="toggle" data-env="forager">forager &middot; the grid above</button>
   </div>
-  <svg id="tp" viewBox="0 0 620 250" style="width:100%;display:block"></svg>
-  <div class="cap" id="tp_cap"></div>
+  <svg id="tp" role="img" aria-describedby="tp_cap" aria-label="Throughput of the two example environments, reference implementation against the batched one." viewBox="0 0 620 250" style="width:100%;display:block"></svg>
+  <figcaption class="cap" id="tp_cap"></figcaption>
 </figure>
 
 <section class="beat">
@@ -348,7 +434,7 @@ self.position = torch.<span class="f">clamp</span>(
     -L, L)</pre>
     </div>
   </div>
-  <div class="cap">The same four lines of spec, written twice. <b>torch.where runs both branches for every instance</b>, so you need both to be computable every time, and you need the random draw the losing branch made not to have disturbed anything. That second condition is the hard one, and it gets its own section below.</div>
+  <figcaption class="cap" id="cap-2">The same four lines of spec, written twice. <b>torch.where runs both branches for every instance</b>, so you need both to be computable every time, and you need the random draw the losing branch made not to have disturbed anything. That second condition is the hard one, and it gets its own section below.</figcaption>
 </figure>
 
 <section class="beat">
@@ -386,7 +472,7 @@ self.position = torch.<span class="f">clamp</span>(
   tests/
     conftest.py    <span class="n">you</span>   ~20 lines naming your two factories
     test_battery.py      <span class="c">from simulacrum.harness.battery import *</span></pre>
-  <div class="cap">That last line is your entire test suite. The star-import gives you ten tests, field-level diffs, and trajectory dumps when something fails.</div>
+  <figcaption class="cap" id="cap-3">That last line is your entire test suite. The star-import gives you ten tests, field-level diffs, and trajectory dumps when something fails.</figcaption>
 </figure>
 
 <div class="rule"></div>
@@ -415,17 +501,17 @@ self.position = torch.<span class="f">clamp</span>(
 <span class="c">Same slot + same step + same index = same draw, in both
 implementations. That is the whole differential-testing
 contract.</span></pre>
-  <div class="cap">From <code>examples/forager/spec.md</code>, unedited: every random decision named, keyed and typed before any code is written. Two of the bugs further down are what happens when a row of this table gets misread.</div>
+  <figcaption class="cap" id="cap-4">From <code>examples/forager/spec.md</code>, unedited: every random decision named, keyed and typed before any code is written. Two of the bugs further down are what happens when a row of this table gets misread.</figcaption>
 </figure>
 
 <figure class="fig narrow reveal">
   <div class="wdg-head"><span>Counter-based draw · <b>slots from forager's spec.md</b></span><span class="tag idle" id="rng_tag">live</span></div>
   <div class="ctl">
-    <label>seed <input type="range" id="r_seed" min="0" max="64" value="1234" step="1"><span class="v" id="r_seed_v">1234</span></label>
-    <label>episode <input type="range" id="r_ep" min="0" max="12" value="3"><span class="v" id="r_ep_v">3</span></label>
+    <label>seed <input type="range" id="r_seed" min="0" max="64" value="1234" step="1" aria-label="Seed"><span class="v" id="r_seed_v">1234</span></label>
+    <label>episode <input type="range" id="r_ep" min="0" max="12" value="3" aria-label="Episode"><span class="v" id="r_ep_v">3</span></label>
   </div>
   <div class="ctl">
-    <label>step <input type="range" id="r_step" min="0" max="80" value="7"><span class="v" id="r_step_v">7</span></label>
+    <label>step <input type="range" id="r_step" min="0" max="80" value="7" aria-label="Step"><span class="v" id="r_step_v">7</span></label>
     <label>slot
       <select id="r_slot">
         <option value="0">0 · AGENT_X</option>
@@ -436,7 +522,7 @@ contract.</span></pre>
         <option value="5" selected>5 · GUST</option>
       </select>
     </label>
-    <label>index <input type="range" id="r_idx" min="0" max="5" value="0"><span class="v" id="r_idx_v">0</span></label>
+    <label>index <input type="range" id="r_idx" min="0" max="5" value="0" aria-label="RNG slot index"><span class="v" id="r_idx_v">0</span></label>
   </div>
   <div class="bits" id="r_bits"></div>
   <div class="bitlab">64 bits out, a pure function of the four numbers above</div>
@@ -507,8 +593,8 @@ contract.</span></pre>
 
 <figure class="fig reveal">
   <div class="toggle-row" id="dep_tabs"></div>
-  <svg id="dep" viewBox="0 0 620 190" style="width:100%;display:block"></svg>
-  <div class="cap" id="dep_cap"></div>
+  <svg id="dep" role="img" aria-describedby="dep_cap" aria-label="Live comparison of how differently each seeded bug fails, computed over 50 episodes in the browser." viewBox="0 0 620 190" style="width:100%;display:block"></svg>
+  <figcaption class="cap" id="dep_cap"></figcaption>
 </figure>
 
 <section class="beat">
@@ -537,7 +623,7 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 alive_count = self.alive.<span class="f">sum</span>(-1, <span class="n">keepdim=True</span>)
 terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 <span class="c">#              [N, 1]              [N]            -&gt; [N, N]  ✗</span></pre>
-  <div class="cap">Instance <b>i</b> now dies the moment <b>any</b> instance in the batch runs out of energy. Episodes end early all over your batch for reasons that have nothing to do with the agent.</div>
+  <figcaption class="cap" id="cap-6">Instance <b>i</b> now dies the moment <b>any</b> instance in the batch runs out of energy. Episodes end early all over your batch for reasons that have nothing to do with the agent.</figcaption>
 </figure>
 
 <section class="beat">
@@ -548,16 +634,16 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 <figure class="fig reveal">
   <div class="wdg-head"><span>Batch independence · solo run vs in-batch run</span><span class="tag ok" id="b_tag">clean</span></div>
   <div class="ctl">
-    <label>batch size N <input type="range" id="b_n" min="1" max="8" value="1"><span class="v" id="b_n_v">1</span></label>
+    <label>batch size N <input type="range" id="b_n" min="1" max="8" value="1" aria-label="Batch size N"><span class="v" id="b_n_v">1</span></label>
     <label style="margin-left:auto"><button class="btn" id="b_bug">Inject the keepdim bug</button></label>
   </div>
-  <svg class="heat" id="b_heat" viewBox="0 0 620 200" role="img" aria-label="batch independence heatmap"></svg>
+  <svg class="heat" id="b_heat" viewBox="0 0 620 200" role="img" aria-describedby="b_cap" aria-label="batch independence heatmap"></svg>
   <div class="heat-legend">
     <span class="k"><span class="sw" style="background:var(--sage)"></span>matches its solo run</span>
     <span class="k"><span class="sw" style="background:var(--coral)"></span>diverged &middot; contaminated by a neighbour</span>
     <span class="k"><span class="sw" style="background:var(--raised);border:1px solid var(--border)"></span>not in batch</span>
   </div>
-  <div class="cap" id="b_cap">Each row is one instance, each column one of 120 steps.</div>
+  <figcaption class="cap" id="b_cap">Each row is one instance, each column one of 120 steps.</figcaption>
 </figure>
 
 <div class="rule"></div>
@@ -598,7 +684,7 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 !! report was written. Report is STALE
 !! Run: simulacrum validate examples/forager
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!</div>
-  <div class="cap">What you get for editing <code>fast.py</code> and going straight back to training. Pass <b>strict=True</b> and it raises instead of warning. The one opaque name in the list, <code>test_benchmark_factory_parity</code>: if you train on a tweaked variant of the env, a <code>torch.compile</code>'d one say, it has to be bit-identical to the batched version that passed everything above, or none of this transfers to the thing that actually trains.</div>
+  <figcaption class="cap" id="cap-8">What you get for editing <code>fast.py</code> and going straight back to training. Pass <b>strict=True</b> and it raises instead of warning. The one opaque name in the list, <code>test_benchmark_factory_parity</code>: if you train on a tweaked variant of the env, a <code>torch.compile</code>'d one say, it has to be bit-identical to the batched version that passed everything above, or none of this transfers to the thing that actually trains.</figcaption>
 </figure>
 
 <div class="caveats">
@@ -621,7 +707,7 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 
 simulacrum <span class="f">new</span> myenv        <span class="c"># spec.md, reference.py, fast.py, tests/</span>
 simulacrum <span class="f">validate</span> myenv   <span class="c"># ten tests, one report, a verdict</span></pre>
-  <div class="cap">Then one line at the top of your training script: <code>require_fresh_report("myenv", strict=True)</code>. No environments ship with the framework; yours stays in your own repo.</div>
+  <figcaption class="cap" id="cap-9">Then one line at the top of your training script: <code>require_fresh_report("myenv", strict=True)</code>. No environments ship with the framework; yours stays in your own repo.</figcaption>
 </figure>
 
 <section class="outro">
@@ -636,6 +722,27 @@ simulacrum <span class="f">validate</span> myenv   <span class="c"># ten tests, 
 </section>
 
 </div>
+<!-- orbitope:a11y-control script — pairs with the button above. -->
+<script>
+(function(){
+  var KEY='orbitope-a11y', root=document.documentElement, btn=document.getElementById('a11yBtn');
+  function stored(){ try{ return localStorage.getItem(KEY); }catch(e){ return null; } }
+  function apply(on,persist){
+    if(on) root.setAttribute('data-a11y',''); else root.removeAttribute('data-a11y');
+    if(btn) btn.setAttribute('aria-pressed',on?'true':'false');
+    if(persist){ try{ localStorage.setItem(KEY,on?'on':'off'); }catch(e){} }
+    document.dispatchEvent(new CustomEvent('a11ychange',{detail:{on:on}}));
+  }
+  // No media query reports colour blindness, so prefers-contrast is only a
+  // hint. An explicit choice always wins, and it is shared across the site
+  // because every article sits on the one origin.
+  var pref=stored();
+  var auto=window.matchMedia&&window.matchMedia('(prefers-contrast: more)').matches;
+  apply(pref?pref==='on':!!auto,false);
+  if(btn) btn.addEventListener('click',function(){ apply(!root.hasAttribute('data-a11y'),true); });
+})();
+</script>
+
 <script src="rng.js"></script>
 <script src="forager.js"></script>
 <script>
@@ -740,26 +847,26 @@ function drawBoard(svg, st, opts){
       return Math.max(2,(Math.log(v)-Math.log(min))/(Math.log(max)-Math.log(min))*(W-LEFT-RIGHT));
     }
     function txt(x,y,s,fill,anchor,size){
-      var t=el('text',{x:x,y:y,fill:fill||'#6A6358','font-size':size||'11',
+      var t=el('text',{x:x,y:y,fill:fill||'var(--text-muted)','font-size':size||'11',
         'font-family':"'JetBrains Mono',monospace"});
       if(anchor)t.setAttribute('text-anchor',anchor);
       t.textContent=s; svg.appendChild(t); return t;
     }
-    txt(LEFT,16,'steps per second, log scale','#6A6358');
+    txt(LEFT,16,'steps per second, log scale','var(--text-muted)');
 
     // reference row
     var y=TOP;
     svg.appendChild(el('rect',{x:LEFT,y:y,width:w(d.ref),height:BH,fill:'var(--steel)',opacity:'.85',rx:2}));
-    txt(LEFT-10,y+17,'readable','#C8C2B4','end');
-    txt(LEFT+w(d.ref)+8,y+17,d.ref.toLocaleString(),'#9AAABB');
+    txt(LEFT-10,y+17,'readable','var(--text-primary)','end');
+    txt(LEFT+w(d.ref)+8,y+17,d.ref.toLocaleString(),'var(--steel-bright)');
     y+=BH+GAP+6;
 
     d.bars.forEach(function(b){
       var faster=b[1]>d.ref;
       svg.appendChild(el('rect',{x:LEFT,y:y,width:w(b[1]),height:BH,
         fill:faster?'var(--amber)':'var(--terra)',opacity:faster?'.9':'.7',rx:2}));
-      txt(LEFT-10,y+17,'batched N='+b[0],'#C8C2B4','end');
-      txt(LEFT+w(b[1])+8,y+17,b[1].toLocaleString(),faster?'#E8C068':'#C47A5A');
+      txt(LEFT-10,y+17,'batched N='+b[0],'var(--text-primary)','end');
+      txt(LEFT+w(b[1])+8,y+17,b[1].toLocaleString(),faster?'var(--amber-bright)':'var(--terra)');
       y+=BH+GAP;
     });
 
@@ -1144,7 +1251,7 @@ function drawBoard(svg, st, opts){
     var span=(hi-lo)||1, zero=LEFT+(0-lo)/span*(W-LEFT-RIGHT);
     function x(v){ return LEFT+(v-lo)/span*(W-LEFT-RIGHT); }
     function txt(px,py,s,fill,anchor,size){
-      var e=el('text',{x:px,y:py,fill:fill||'#6A6358','font-size':size||'11',
+      var e=el('text',{x:px,y:py,fill:fill||'var(--text-muted)','font-size':size||'11',
         'font-family':"'JetBrains Mono',monospace"});
       if(anchor)e.setAttribute('text-anchor',anchor);
       e.textContent=s; svg.appendChild(e); return e;
@@ -1159,16 +1266,16 @@ function drawBoard(svg, st, opts){
       var xv=x(r[1]);
       svg.appendChild(el('rect',{x:Math.min(zero,xv), y:y, width:Math.max(Math.abs(xv-zero),2),
         height:BH, fill:r[2], opacity:'.9', rx:2}));
-      txt(LEFT-14,y+22,r[0],'#C8C2B4','end');
+      txt(LEFT-14,y+22,r[0],'var(--text-primary)','end');
       // Value in a fixed right-hand column so a negative bar's label can never
       // collide with the row label on the left.
       txt(W-8, y+22, (r[1]>=0?'+':'')+r[1].toFixed(2),
-          r[2]==='var(--coral)'?'#FF5E3A':'#EDE8DC', 'end', '12');
+          r[2]==='var(--coral)'?'var(--coral)':'var(--text-bright)', 'end', '12');
       y+=BH+GAP;
     });
     svg.appendChild(el('line',{x1:zero,y1:TOP-8,x2:zero,y2:y-GAP+8,
-      stroke:'#6A6358','stroke-width':'1','stroke-dasharray':'3 3',opacity:'.7'}));
-    txt(zero,y-GAP+22,'0 return','#6A6358','middle','10');
+      stroke:'var(--text-muted)','stroke-width':'1','stroke-dasharray':'3 3',opacity:'.7'}));
+    txt(zero,y-GAP+22,'0 return','var(--text-muted)','middle','10');
 
     var delta=d.real-d.inSim;
     document.getElementById('dep_cap').innerHTML =
@@ -1209,7 +1316,7 @@ function drawBoard(svg, st, opts){
     while(svg.firstChild) svg.removeChild(svg.firstChild);
     var W=620, LEFT=54, TOP=14, cw=(W-LEFT-10)/STEPS, rh=18, gap=3;
     for(var r=0;r<8;r++){
-      var lab=el('text',{x:LEFT-10,y:TOP+r*(rh+gap)+13,fill:'#6A6358','font-size':'10',
+      var lab=el('text',{x:LEFT-10,y:TOP+r*(rh+gap)+13,fill:'var(--text-muted)','font-size':'10',
         'font-family':"'JetBrains Mono',monospace",'text-anchor':'end'});
       lab.textContent='inst '+r; svg.appendChild(lab);
       for(var t2=0;t2<STEPS;t2++){
@@ -1219,10 +1326,10 @@ function drawBoard(svg, st, opts){
           height:rh, fill:fill, opacity:op}));
       }
     }
-    var ax=el('text',{x:LEFT,y:TOP+8*(rh+gap)+12,fill:'#6A6358','font-size':'10',
+    var ax=el('text',{x:LEFT,y:TOP+8*(rh+gap)+12,fill:'var(--text-muted)','font-size':'10',
       'font-family':"'JetBrains Mono',monospace"});
     ax.textContent='step 0'; svg.appendChild(ax);
-    var ax2=el('text',{x:W-10,y:TOP+8*(rh+gap)+12,fill:'#6A6358','font-size':'10',
+    var ax2=el('text',{x:W-10,y:TOP+8*(rh+gap)+12,fill:'var(--text-muted)','font-size':'10',
       'font-family':"'JetBrains Mono',monospace",'text-anchor':'end'});
     ax2.textContent='step '+STEPS; svg.appendChild(ax2);
 
