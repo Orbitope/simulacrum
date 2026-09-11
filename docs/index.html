@@ -600,7 +600,7 @@ contract.</span></pre>
 </figure>
 
 <section class="beat">
-  <p>You get three different disasters, and only one of them looks like a disaster while it's happening. The berry bug is the loud one: your dashboard reads <span class="sage">+11.5</span> so you ship, and the policy scores <span class="coral">−3.3</span> in the real environment because it learned a map that doesn't exist. The reward bug is the quiet one that costs you a month: your dashboard reads <span class="coral">−2.3</span> for a policy actually worth <span class="sage">+9.2</span>, so you decide your algorithm is broken and go tune hyperparameters that were never the problem. The float bugs change no behaviour at all. They just mean nobody, including you, can reproduce your run.</p>
+  <p>You get three different disasters, and only one of them looks like a disaster while it's happening. The berry bug is the loud one: your dashboard reads <span class="sage">+11.5</span> so you ship, and the policy scores <span class="coral">−3.3</span> in the real environment because it learned a map that doesn't exist. The reward bug is the quiet one that costs you a month: your dashboard reads <span class="coral">−2.3</span> for a policy actually worth <span class="sage">+9.2</span>, so you decide your algorithm is broken and go tune hyperparameters that were never the problem. The float bugs change no behavior at all. They just mean nobody, including you, can reproduce your run.</p>
   <p class="dim">To be clear about what this is: a hand-written policy scored in both environments, not a trained agent. A real training run would also <i>adapt</i> to the broken dynamics, which usually widens these gaps rather than closing them.</p>
 </section>
 
@@ -642,7 +642,7 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
   <svg class="heat" id="b_heat" viewBox="0 0 620 200" role="img" aria-describedby="b_cap" aria-label="batch independence heatmap"></svg>
   <div class="heat-legend">
     <span class="k"><span class="sw" style="background:var(--sage)"></span>matches its solo run</span>
-    <span class="k"><span class="sw" style="background:var(--coral)"></span>diverged &middot; contaminated by a neighbour</span>
+    <span class="k"><span class="sw" style="background:var(--coral)"></span>diverged &middot; contaminated by a neighbor</span>
     <span class="k"><span class="sw" style="background:var(--raised);border:1px solid var(--border)"></span>not in batch</span>
   </div>
   <figcaption class="cap" id="b_cap">Each row is one instance, each column one of 120 steps.</figcaption>
@@ -651,7 +651,7 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 <div class="rule"></div>
 
 <section class="beat">
-  <p>All of that machinery ships with the package: the counter-based RNG in a scalar and a tensor flavour that are guaranteed to agree bit-for-bit, a <code>BatchedEnv</code> base class that owns the step loop, auto-reset inside the tensors, terminal-state capture and invariant checking, and trajectory read/write against your schema. forager's <code>fast.py</code> is about sixty lines, because the base class handles everything that isn't the game itself.</p>
+  <p>All of that machinery ships with the package: the counter-based RNG in a scalar and a tensor flavor that are guaranteed to agree bit-for-bit, a <code>BatchedEnv</code> base class that owns the step loop, auto-reset inside the tensors, terminal-state capture and invariant checking, and trajectory read/write against your schema. forager's <code>fast.py</code> is about sixty lines, because the base class handles everything that isn't the game itself.</p>
 </section>
 
 <!-- 8. THE GATE -->
