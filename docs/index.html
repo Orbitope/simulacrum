@@ -378,7 +378,7 @@
 <section class="beat">
   <div class="eyebrow">Why bother</div>
   <h2>Your simulator is the bottleneck.</h2>
-  <p>Training alternates between two jobs. The optimizer updates weights on the GPU, which is fast. The environment produces the experience the optimizer learns from, in Python, one step per call, which isn't. Run that a few million times and the environment is what you're waiting on, not the hardware you paid for.</p>
+  <p>Training alternates between two jobs. The optimizer updates weights on the GPU, which is fast. The environment produces the experience the optimizer learns from, in Python, one step per call, which isn't. Run that a few million times and the environment is what you're waiting on.</p>
   <p>Rewrite it so every copy advances in one tensor operation and the environment stops being the thing you wait on. These are the numbers from the two example environments in the repo:</p>
 </section>
 
@@ -452,7 +452,7 @@ self.position = torch.<span class="f">clamp</span>(
   <h2>Keep the slow one and put it to work.</h2>
   <p>Write the environment twice. Write it once so you can read it, with explicit <code>if</code>s, one instance, every line traceable to a rule. Write it again so ten thousand copies can run it. You write both from a single <code>spec.md</code>, and <b>never from each other</b>.</p>
   <p>Then you let a machine check, step by step, that the two produce <b>bit-identical</b> states, rewards, terminations and observations. If they agree, either you got the spec right twice or you made the same mistake twice in two completely different programming styles. The second is a lot less likely than getting it right once by luck.</p>
-  <p>You end up with a readable version you can still debug against, reason about and explain your results with, and a batched version that is <span class="sage">provably the same environment</span>. You keep the first and add the second.</p>
+  <p>You end up with a readable version you can still debug against, reason about and explain your results with, and a batched version that is <span class="sage">provably the same environment</span>.</p>
   <p>Three things have to work for that to hold: the two versions have to draw identical randomness, a test has to compare them step by step, and a second test has to catch the bugs that only appear in a batch. The rest of this page is those three, each one running live.</p>
   <p class="dim">Agreement proves the two programs implement the same spec, not that the spec describes the game you meant to build. A wrong rule, written down clearly, passes every test on this page twice.</p>
 </section>
@@ -486,7 +486,7 @@ self.position = torch.<span class="f">clamp</span>(
   <p>This is where most attempts fail. Your readable version draws randomness one instance at a time. Your batched version draws for ten thousand at once and throws most of them away. If you're using a normal random generator, the kind that keeps a <b>position in a stream</b>, the draws you threw away still moved the stream forward, and your two programs come apart permanently on step one.</p>
   <p>So simulacrum doesn't use a stream. Every random decision is a pure function of four numbers:</p>
   <p style="text-align:center"><code>bits = hash(episode_key, step, slot, index)</code></p>
-  <p>It keeps no history and no cursor, so there's nothing to sync. The <span class="amber">slot</span> tells it <i>which</i> decision this is, and the <span class="amber">index</span> separates repeats of the same decision, one per berry for example. Slots aren't invented in the code; they're declared in the spec, and this is the level of precision a spec has to reach before either implementation exists:</p>
+  <p>It keeps no history and no cursor, so there's nothing to sync. The <span class="amber">slot</span> tells it <i>which</i> decision this is, and the <span class="amber">index</span> separates repeats of the same decision, one per berry for example. Slots are declared in the spec, and this is the level of precision a spec has to reach before either implementation exists:</p>
 </section>
 
 <figure class="fig narrow reveal">
@@ -553,7 +553,7 @@ contract.</span></pre>
   <div class="eyebrow">The differential test</div>
   <h2>Break it on purpose and watch the test catch it.</h2>
   <p>Below are two copies running the same seed and the same actions, readable on the left and batched on the right. <b>One bug is already switched on</b> so that you land on a real divergence. Untick it and 300 steps come back identical, then go break something else.</p>
-  <p>Each bug shows you the <b>actual line of code</b> that causes it and what it costs you at training time. None of these are invented. They're the mistakes people make turning a readable environment into tensors, and most of them leave you with an environment that trains perfectly well.</p>
+  <p>Each bug shows you the <b>actual line of code</b> that causes it and what it costs you at training time. These are the mistakes people make turning a readable environment into tensors, and most of them leave you with an environment that trains perfectly well.</p>
 </section>
 
 <figure class="fig reveal">
@@ -601,7 +601,7 @@ contract.</span></pre>
 
 <section class="beat">
   <p>You get three different disasters, and only one of them looks like a disaster while it's happening. The berry bug is the loud one. Your dashboard reads <span class="sage">+11.5</span> so you ship, and the policy scores <span class="coral">−3.3</span> in the real environment because it learned a map that doesn't exist. The reward bug is the quiet one that costs you a month. Your dashboard reads <span class="coral">−2.3</span> for a policy worth <span class="sage">+9.2</span>, so you decide your algorithm is broken and go tune hyperparameters that were never the problem. The float bugs change no behavior. They mean nobody, including you, can reproduce your run.</p>
-  <p class="dim">This is a hand-written policy scored in both environments, not a trained agent. A real training run would also <i>adapt</i> to the broken dynamics, which usually widens these gaps rather than closing them.</p>
+  <p class="dim">This is a hand-written policy scored in both environments. A real training run would also <i>adapt</i> to the broken dynamics, which usually widens these gaps rather than closing them.</p>
 </section>
 
 <div class="rule"></div>
@@ -611,7 +611,7 @@ contract.</span></pre>
   <div class="eyebrow">Batch independence</div>
   <h2>The bug that only exists in a batch.</h2>
   <p>Everything so far compares your batched version against your readable one, and your readable one only runs a single instance. So that comparison runs at <b>N = 1</b>, and the whole reason you're doing this is to run at N = 8192. What you tested and what you ship aren't the same thing.</p>
-  <p>Somewhere in your batched code a mask shaped <code>[N]</code> meets something shaped <code>[N, 1]</code>. In NumPy and PyTorch that's a <b>broadcast</b>, not an error, and it hands you an <code>[N, N]</code> matrix that a reduction downstream flattens back into a perfectly reasonable-looking <code>[N]</code>. It takes one keyword to do this:</p>
+  <p>Somewhere in your batched code a mask shaped <code>[N]</code> meets something shaped <code>[N, 1]</code>. In NumPy and PyTorch that mismatch silently <b>broadcasts</b> instead of raising an error, and it hands you an <code>[N, N]</code> matrix that a reduction downstream flattens back into a perfectly reasonable-looking <code>[N]</code>. It takes one keyword to do this:</p>
 </section>
 
 <figure class="fig narrow reveal">
@@ -629,7 +629,7 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 </figure>
 
 <section class="beat">
-  <p>At one instance that accidental matrix is 1×1, which is exactly the right answer. So your differential test is <span class="coral">mathematically incapable of seeing this bug</span> at the only batch size it can run at. The bug shows up when you scale up, the regime you ship.</p>
+  <p>At one instance that accidental matrix is 1×1, which is exactly the right answer. So your differential test <span class="coral">can't catch this bug</span> at the only batch size it can run at. The bug shows up when you scale up, the regime you ship.</p>
   <p>So you need a second check that doesn't involve your readable version. Run instance <i>i</i> on its own. Run it again inside a batch of eight. Require the two to be bit-identical. <b>Drag N up and watch the rows go red.</b></p>
 </section>
 
@@ -690,8 +690,8 @@ terminated  = (alive_count == 0) | (self.energy &lt;= 0.0)
 </figure>
 
 <div class="caveats">
-  <div class="c"><span><b>This is evidence, not proof.</b> Two implementations agreeing means the same mistake would have had to happen twice, in two very different styles. That's an unlikely coincidence, not a formal verification.</span></div>
-  <div class="c"><span><b>The JavaScript on this page shares an author with the Python.</b> It's a third implementation from the same spec, checked bit-for-bit across 1,500 steps, not an independent audit. It tells you the spec is precise enough to rebuild from.</span></div>
+  <div class="c"><span><b>This is evidence, not proof.</b> Two implementations agreeing means the same mistake would have had to happen twice, in two very different styles. That's an unlikely coincidence.</span></div>
+  <div class="c"><span><b>The JavaScript on this page shares an author with the Python.</b> It's a third implementation from the same spec, checked bit-for-bit across 1,500 steps. It tells you the spec is precise enough to rebuild from.</span></div>
 </div>
 
 <div class="rule"></div>
