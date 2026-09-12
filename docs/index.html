@@ -320,7 +320,7 @@
 <body>
 <!-- orbitope:a11y-control — self-contained; move as one block. -->
 <button id="a11yBtn" class="a11y-btn" type="button" aria-pressed="false"
-        title="High-contrast, colour-blind-safe figures">
+        title="High-contrast, color-blind-safe figures">
   <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none"
        stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <circle cx="12" cy="12" r="9"/>
@@ -1036,7 +1036,7 @@ function drawBoard(svg, st, opts){
      e:'Values stay plausible and differ only in the low bits. Nothing ever looks wrong to you, and your batched runs will not reproduce your reference runs.',
      c:['self.energy = (self.energy - STEP_COST) + gained',
         'self.energy = (self.energy - STEP_COST) + gained.to(torch.float32)']},
-    {id:'obsFloat64', t:'Observation normalised in float64',
+    {id:'obsFloat64', t:'Observation normalized in float64',
      d:'Same narrowing missed one layer out, in what the agent actually sees.',
      e:'Your network sees slightly different numbers than your readable env would produce. This is the one that makes a published result impossible to reproduce.',
      c:['self.pos[:, 0] / (G - 1)',
@@ -1223,7 +1223,7 @@ function drawBoard(svg, st, opts){
     {id:'rewardBeforeCollect', label:'Wrong metric',
      note:'The reward is computed a line too early, so eating never pays. The policy itself is fine. Your dashboard is what is broken, and it will have you tuning an algorithm that was never the problem.'},
     {id:'energyFloat64', label:'Silent',
-     note:'Energy accumulated in float64 instead of float32. No behavioural difference at all at this scale. What you lose is reproducibility: nobody, including you, gets these numbers back.'}
+     note:'Energy accumulated in float64 instead of float32. No behavioral difference at all at this scale. What you lose is reproducibility: nobody, including you, gets these numbers back.'}
   ];
   var pick=0, cache={};
 
@@ -1344,7 +1344,7 @@ function drawBoard(svg, st, opts){
       tag.textContent='leak detected'; tag.className='tag no';
       cap.innerHTML='<b>Same bug, larger batch.</b> Instance '+firstBad.i+' first diverges from its own solo run at step '+firstBad.t+
         ', because its episode was ended by a <i>different</i> instance running out of energy. Nothing about instance '+firstBad.i+
-        ' changed; only its neighbours did.';
+        ' changed; only its neighbors did.';
     }
   }
   nIn.addEventListener('input',function(){n=+nIn.value; render();});
